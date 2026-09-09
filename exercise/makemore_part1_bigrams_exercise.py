@@ -112,8 +112,10 @@ def normalize_counts(N, smoothing=1):
         P.sum(1)               -> (27,)  == (1, 27)，广播时按列对齐 ❌
       所以必须写 keepdim=True。
     """
-    # TODO: 实现归一化
-    raise NotImplementedError("normalize_counts")
+    # 实现归一化
+    P = (N + smoothing).float()
+    P = P / P.sum(1, keepdim=True)
+    return P
 
 
 def sample_from_P(P, itos, num=5, seed=SEED):
@@ -129,9 +131,19 @@ def sample_from_P(P, itos, num=5, seed=SEED):
           （torch 各版本 multinomial 的随机数实现有差异，采样出的具体名字不一定和
             课程视频里完全一致，不用纠结；只要看起来像"名字模样的乱码"就对了。）
     """
-    # TODO: 实现采样
-    raise NotImplementedError("sample_from_P")
-
+    # 实现采样
+    g = torch.Generator().manual_seed(seed)
+    name_list = []
+    for i in range(num):
+        ix = 0
+        name = []
+        while True:
+            ix = torch.multinomial(P[ix], num_samples=1, replacement=True, generator=g)
+            if ix == 0:
+                name_list.append(''.join(name))
+                break
+            name.append(itos[ix])
+    return name_list
 
 def nll_loss_from_P(words, P, stoi):
     """
@@ -145,8 +157,8 @@ def nll_loss_from_P(words, P, stoi):
 
     返回一个 float。补全后在完整 names.txt 上应该约等于 2.4544。
     """
-    # TODO: 实现 loss 计算
-    raise NotImplementedError("nll_loss_from_P")
+    # 实现 loss 计算
+    return -torch.log(P).sum().item() / 27
 
 
 # ---------------------------------------------------------------------------
