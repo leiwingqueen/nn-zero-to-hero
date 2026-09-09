@@ -61,8 +61,14 @@ def build_vocab(words):
 
     提示：先 set(''.join(words)) 拿到所有出现过的字符，sorted 之后 enumerate。
     """
-    # TODO: 实现字符表
-    raise NotImplementedError("build_vocab")
+    # 实现字符表
+    chars = sorted(set(''.join(words)))
+    stoi = {'.': 0}
+    itos = {0: '.'}
+    for i, char in enumerate(chars):
+        stoi[char] = i + 1
+        itos[i + 1] = char
+    return stoi, itos
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +87,15 @@ def count_bigrams(words, stoi):
 
     提示：N = torch.zeros((27, 27), dtype=torch.int32)
     """
-    # TODO: 实现 bigram 计数
-    raise NotImplementedError("count_bigrams")
+    # 实现 bigram 计数
+    N = torch.zeros((27, 27), dtype=torch.int32)
+    for word in words:
+        chs = ['.'] + list(word) + ['.']
+        for (c1, c2) in zip(chs, chs[1:]):
+            idx1 = stoi[c1]
+            idx2 = stoi[c2]
+            N[idx1, idx2] += 1
+    return N
 
 
 def normalize_counts(N, smoothing=1):
