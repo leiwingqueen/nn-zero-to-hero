@@ -170,6 +170,7 @@ def nll_loss_from_P(words, P, stoi):
             n += 1
     return nll / n
 
+
 # ---------------------------------------------------------------------------
 # 3. 神经网络法：把 bigram 模型写成一层线性网络
 # ---------------------------------------------------------------------------
@@ -182,9 +183,17 @@ def build_dataset(words, stoi):
 
     同样每个单词要前后补 '.'。完整数据集上应该有 228146 个样本。
     """
-    # TODO: 实现训练集构造
-    raise NotImplementedError("build_dataset")
-
+    # 实现训练集构造
+    xs = []
+    ys = []
+    for word in words:
+        chs = ['.'] + list(word) + ['.']
+        for (c1, c2) in zip(chs, chs[1:]):
+            idx1 = stoi[c1]
+            idx2 = stoi[c2]
+            xs.append(idx1)
+            ys.append(idx2)
+    return torch.tensor(xs), torch.tensor(ys)
 
 def forward(xs, W):
     """
