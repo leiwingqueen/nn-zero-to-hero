@@ -138,12 +138,13 @@ def sample_from_P(P, itos, num=5, seed=SEED):
         ix = 0
         name = []
         while True:
-            ix = torch.multinomial(P[ix], num_samples=1, replacement=True, generator=g)
+            ix = torch.multinomial(P[ix], num_samples=1, replacement=True, generator=g).item()
             if ix == 0:
                 name_list.append(''.join(name))
                 break
             name.append(itos[ix])
     return name_list
+
 
 def nll_loss_from_P(words, P, stoi):
     """
@@ -158,8 +159,16 @@ def nll_loss_from_P(words, P, stoi):
     返回一个 float。补全后在完整 names.txt 上应该约等于 2.4544。
     """
     # 实现 loss 计算
-    return -torch.log(P).sum().item() / 27
-
+    n = 0
+    nll = 0
+    for word in words:
+        chs = ['.'] + list(word) + ['.']
+        for (c1, c2) in zip(chs, chs[1:]):
+            idx1 = stoi[c1]
+            idx2 = stoi[c2]
+            nll += -torch.log(P[idx1, idx2]).item()
+            n += 1
+    return nll / n
 
 # ---------------------------------------------------------------------------
 # 3. 神经网络法：把 bigram 模型写成一层线性网络
