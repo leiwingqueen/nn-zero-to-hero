@@ -195,6 +195,7 @@ def build_dataset(words, stoi):
             ys.append(idx2)
     return torch.tensor(xs), torch.tensor(ys)
 
+
 def forward(xs, W):
     """
     前向传播，返回 probs，shape 为 (len(xs), 27)。
@@ -211,8 +212,12 @@ def forward(xs, W):
     小知识：one-hot 向量乘以矩阵 W，本质就是「取出 W 的第 ix 行」，
             所以这个网络和查表法在数学上是同一个东西。
     """
-    # TODO: 实现前向传播
-    raise NotImplementedError("forward")
+    # 实现前向传播
+    xenc = F.one_hot(xs, num_classes=27).float()
+    logits = xenc @ W
+    # 这两步就是softmax的操作
+    counts = logits.exp()
+    return counts / counts.sum(1, keepdim=True)
 
 
 def train(xs, ys, steps=100, lr=50.0, reg=0.01, seed=SEED, verbose=True):
@@ -234,9 +239,19 @@ def train(xs, ys, steps=100, lr=50.0, reg=0.01, seed=SEED, verbose=True):
 
     学习率 50、跑 100 步左右，loss 会收敛到 2.47 附近（略高于统计法，因为还没完全收敛）。
     """
-    # TODO: 实现训练循环
-    raise NotImplementedError("train")
-
+    # 实现训练循环
+    g = torch.Generator().manual_seed(2147483647)
+    num = len(xs)
+    W = torch.randn((27, 27), generator=g, requires_grad=True)
+    for i in range(steps):
+        probs = forward(xs, W)
+        nll = -probs[torch.arange(num), ys].log().mean()
+        loss = nll + reg * (W ** 2).mean()
+        W.grad = None
+        loss.backward()
+        # update
+        W.data += -lr * W.grad
+    return W
 
 def sample_from_W(W, itos, num=5, seed=SEED):
     """
