@@ -253,6 +253,7 @@ def train(xs, ys, steps=100, lr=50.0, reg=0.01, seed=SEED, verbose=True):
         W.data += -lr * W.grad
     return W
 
+
 def sample_from_W(W, itos, num=5, seed=SEED):
     """
     从训练好的网络里采样名字。
@@ -265,9 +266,25 @@ def sample_from_W(W, itos, num=5, seed=SEED):
     如果实现正确，输出应该和 sample_from_P 几乎一模一样 —— 这正是本节课的重点结论：
     两种方法学到的是同一个模型。
     """
-    # TODO: 实现基于 W 的采样
-    raise NotImplementedError("sample_from_W")
-
+    # 实现基于 W 的采样
+    # 提前把所有的概率P算出来
+    xenc = F.one_hot(torch.arange(27), num_classes=27).float()
+    logits = xenc @ W
+    # 这两步就是softmax的操作
+    counts = logits.exp()
+    P = counts / counts.sum(1, keepdim=True)
+    g = torch.Generator().manual_seed(seed)
+    name_list = []
+    for i in range(num):
+        ix = 0
+        name = []
+        while True:
+            ix = torch.multinomial(P[ix], num_samples=1, replacement=True, generator=g).item()
+            if ix == 0:
+                name_list.append(''.join(name))
+                break
+            name.append(itos[ix])
+    return name_list
 
 # ---------------------------------------------------------------------------
 # 主流程：逐节自检
