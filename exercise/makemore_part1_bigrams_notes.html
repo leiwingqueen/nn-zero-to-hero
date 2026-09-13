@@ -1,0 +1,444 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bigram 模型的两种实现</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700&family=Noto+Sans+SC:wght@300;400;500&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --paper:#F3F5F1;
+  --surface:#FBFCFA;
+  --sunk:#EAEEE8;
+  --ink:#18201D;
+  --ink2:#4E5A54;
+  --ink3:#7C877F;
+  --line:#D9DED4;
+  --line2:#C3CABC;
+  --accent:#0E5C4F;
+  --accent-ink:#0A473D;
+  --soft:#DCE9E4;
+  --amber:#A96B12;
+  --amber-soft:#F2E7D2;
+  --code-bg:#1A2220;
+  --code-ink:#DCE5E0;
+  --shadow:0 1px 2px rgba(24,32,29,.05);
+  --serif:"Noto Serif SC",Songti SC,Georgia,serif;
+  --sans:"Noto Sans SC",-apple-system,"PingFang SC",Helvetica,sans-serif;
+  --mono:"JetBrains Mono",SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#111716;--surface:#18201E;--sunk:#1E2725;--ink:#E7EDE9;--ink2:#A3AFA9;
+    --ink3:#78847E;--line:#28322F;--line2:#37433F;--accent:#5FC0A7;--accent-ink:#8AD6C1;
+    --soft:#1C302B;--amber:#D8A45E;--amber-soft:#2C2418;--code-bg:#0C1211;--code-ink:#D5E0DA;
+    --shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#111716;--surface:#18201E;--sunk:#1E2725;--ink:#E7EDE9;--ink2:#A3AFA9;
+  --ink3:#78847E;--line:#28322F;--line2:#37433F;--accent:#5FC0A7;--accent-ink:#8AD6C1;
+  --soft:#1C302B;--amber:#D8A45E;--amber-soft:#2C2418;--code-bg:#0C1211;--code-ink:#D5E0DA;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+body{
+  background:var(--paper);color:var(--ink);
+  font-family:var(--sans);font-weight:400;font-size:15.5px;line-height:1.78;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:820px;margin:0 auto;padding-inline:20px;padding-block:0 88px}
+::selection{background:var(--soft);color:var(--accent-ink)}
+a{color:var(--accent);text-underline-offset:3px}
+h1,h2,h3{font-family:var(--serif);font-weight:700;text-wrap:balance;margin:0}
+code{font-family:var(--mono);font-size:.86em;background:var(--sunk);padding:.1em .34em;border-radius:3px;color:var(--accent-ink)}
+:root[data-theme="dark"] code,:root:not([data-theme="light"]) code{}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) code{color:var(--accent)}}
+:root[data-theme="dark"] code{color:var(--accent)}
+p{margin:0}
+
+/* ---- header ---- */
+header{padding-block:56px 40px;border-bottom:1px solid var(--line)}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.eyebrow .dot{width:3px;height:3px;border-radius:50%;background:var(--line2)}
+h1{font-size:clamp(30px,6.4vw,46px);line-height:1.24;margin-block:18px 14px;letter-spacing:-.01em}
+.dek{font-size:17px;color:var(--ink2);font-weight:300;max-width:60ch}
+.byline{margin-top:26px;font-family:var(--mono);font-size:12px;color:var(--ink3)}
+.byline a{color:var(--ink3)}
+
+/* ---- verdict ---- */
+.verdict{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);
+  border:1px solid var(--line);margin-block:36px;border-radius:2px;overflow:hidden}
+.vcell{background:var(--surface);padding:18px 18px 16px}
+.vcell .k{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+.vcell .v{font-family:var(--serif);font-size:31px;font-weight:700;line-height:1.15;margin-top:8px;font-variant-numeric:tabular-nums}
+.vcell .n{font-size:12.5px;color:var(--ink2);margin-top:4px;line-height:1.5}
+.vcell.hl .v{color:var(--accent)}
+@media (max-width:560px){.verdict{grid-template-columns:1fr}}
+
+/* ---- sections ---- */
+section{padding-block:44px 0}
+.shead{display:flex;gap:16px;align-items:baseline;border-top:1px solid var(--line);padding-top:22px;margin-bottom:22px}
+.snum{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent);letter-spacing:.06em;flex:none;padding-top:6px}
+h2{font-size:24px;line-height:1.35}
+.sub{font-family:var(--mono);font-size:11px;color:var(--ink3);letter-spacing:.08em;margin-top:5px}
+h3{font-size:16.5px;margin-block:30px 10px}
+section > p + p{margin-top:14px}
+.stack{display:flex;flex-direction:column;gap:16px}
+
+/* ---- code ---- */
+pre{background:var(--code-bg);color:var(--code-ink);font-family:var(--mono);font-size:12.8px;
+  line-height:1.72;padding:16px 18px;border-radius:4px;overflow-x:auto;margin:0;tab-size:4}
+pre .c{color:#7E9C90}
+pre .k{color:#7FC7B0}
+pre .s{color:#C9AE7A}
+pre .n{color:#A8C4E0}
+figure{margin:0}
+figcaption{font-size:12.5px;color:var(--ink3);margin-top:9px;line-height:1.6}
+
+/* ---- callout ---- */
+.note{border-left:2px solid var(--amber);background:var(--amber-soft);padding:14px 16px;border-radius:0 3px 3px 0}
+.note .t{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-bottom:6px}
+.note p{font-size:14.5px;line-height:1.7}
+.key{border-left:2px solid var(--accent);background:var(--soft);padding:16px 18px;border-radius:0 3px 3px 0}
+.key .t{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:6px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .key .t{color:var(--accent)}}
+:root[data-theme="dark"] .key .t{color:var(--accent)}
+.key p{font-size:14.5px;line-height:1.72}
+
+/* ---- tables ---- */
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:400px}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);
+  text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);font-weight:400;white-space:nowrap}
+td{padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+td.mono{font-family:var(--mono)}
+
+/* ---- heatmap ---- */
+.hm-outer{overflow-x:auto;padding-bottom:6px}
+.hm{display:grid;grid-template-columns:16px repeat(27,1fr);gap:1px;min-width:520px;
+  font-family:var(--mono);font-size:8.5px;color:var(--ink3);max-width:560px}
+.hm .lab{display:flex;align-items:center;justify-content:center;line-height:1}
+.cell{aspect-ratio:1;border-radius:1px;cursor:default;
+  background:color-mix(in srgb, var(--accent) var(--t,0%), var(--sunk))}
+.hm-bar{display:flex;align-items:center;gap:10px;margin-top:14px;font-family:var(--mono);font-size:11px;color:var(--ink3)}
+.hm-grad{height:8px;flex:1;max-width:200px;border-radius:2px;
+  background:linear-gradient(90deg,var(--sunk),var(--accent))}
+#hm-read{font-family:var(--mono);font-size:12px;color:var(--ink2);margin-top:8px;min-height:1.5em}
+#hm-read b{color:var(--accent);font-weight:600}
+
+/* ---- chart ---- */
+.chart{width:100%;height:auto;display:block;overflow:visible}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .ref{stroke:var(--line2);stroke-width:1;stroke-dasharray:3 3}
+.chart .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round}
+.chart .ar{fill:var(--soft);opacity:.55}
+.chart .pt{fill:var(--accent)}
+.chart text{font-family:var(--mono);font-size:10.5px;fill:var(--ink3)}
+.chart text.em{fill:var(--accent);font-weight:600}
+
+/* ---- sample compare ---- */
+.samples{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.scol{background:var(--surface);padding:16px 18px}
+.scol h4{margin:0 0 12px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-weight:400}
+.scol ol{margin:0;padding-left:20px;font-family:var(--mono);font-size:13.5px;line-height:2}
+.scol li::marker{color:var(--ink3);font-size:11px}
+.diff{background:var(--amber-soft);color:var(--amber);padding:0 2px;border-radius:2px;font-weight:600}
+@media (max-width:520px){.samples{grid-template-columns:1fr}}
+
+/* ---- checklist ---- */
+ul.chk{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+ul.chk li{display:flex;gap:12px;font-size:14.5px;line-height:1.7}
+ul.chk .m{font-family:var(--mono);font-size:11px;color:var(--accent);flex:none;padding-top:5px;letter-spacing:.05em}
+ul.chk b{font-weight:500}
+footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:11.5px;color:var(--ink3);line-height:1.9}
+@media (prefers-reduced-motion:no-preference){.cell{transition:outline-color .1s}}
+.cell:hover{outline:1.5px solid var(--ink);outline-offset:0}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow"><span>Neural Networks: Zero to Hero</span><span class="dot"></span><span>Lecture 2 / makemore part 1</span><span class="dot"></span><span>技术分享</span></div>
+  <h1>Bigram 模型的两种实现</h1>
+  <p class="dek">同一个字符级二元语言模型，用「数数」和「梯度下降」各写一遍，最后证明它们学到的是同一张 27×27 的概率表。这是整个课程从统计走向神经网络的那一步。</p>
+  <p class="byline">exercise/makemore_part1_bigrams_exercise.py &nbsp;·&nbsp; 32,033 个英文名字 &nbsp;·&nbsp; CPU 单机 &lt; 5 秒</p>
+</header>
+
+<div class="verdict">
+  <div class="vcell"><div class="k">统计法 loss</div><div class="v">2.4546</div><div class="n">数出 228,146 个 bigram，加一平滑后按行归一化</div></div>
+  <div class="vcell"><div class="k">神经网络 loss</div><div class="v">2.4748</div><div class="n">27×27 权重矩阵，lr=50，梯度下降 100 步</div></div>
+  <div class="vcell hl"><div class="k">两者差距</div><div class="v">0.0202</div><div class="n">继续训到 200 步收敛至 2.4653，还在缩小</div></div>
+</div>
+
+<section>
+  <div class="shead"><div class="snum">01</div><div><h2>问题设定：预测下一个字符</h2><div class="sub">load_words / build_vocab</div></div></div>
+  <div class="stack">
+    <p>数据集是 32,033 个英文名字，最短 2 个字符，最长 15 个。模型只看<strong>前一个字符</strong>来预测下一个字符——这就是 bigram（二元组）假设，也是最弱的一种语言模型。弱有弱的好处：它小到可以完全写在一张 27×27 的表里，因此适合把「训练一个语言模型」这件事的每一环都摊开看清楚。</p>
+    <p>词表只有 27 个 token：26 个小写字母，加一个特殊符号 <code>.</code>。这个点同时充当开始符和结束符，并且必须映射到下标 0。</p>
+    <figure>
+<pre><span class="c"># '.' 固定占 0 号位，字母按字典序排 1..26</span>
+chars = <span class="k">sorted</span>(<span class="k">set</span>(<span class="s">''</span>.join(words)))
+stoi = {<span class="s">'.'</span>: <span class="n">0</span>}
+<span class="k">for</span> i, char <span class="k">in</span> <span class="k">enumerate</span>(chars):
+    stoi[char] = i + <span class="n">1</span>
+</pre>
+      <figcaption>为什么开始和结束能共用一个符号？因为它们从不出现在同一个位置上：<code>.</code> 作为<em>输入</em>时表示「句子开头」，作为<em>输出</em>时表示「到此结束」。矩阵的第 0 行是起始字符分布，第 0 列是结束字符分布，互不干扰。</figcaption>
+    </figure>
+    <div class="note">
+      <div class="t">易错点</div>
+      <p>如果偷懒写成 <code>stoi = {s:i for i,s in enumerate(chars)}</code> 再补 <code>stoi['.']=26</code>，后面所有断言都会挂——课程里的可视化、以及「采样遇到 0 就停」的约定都默认了 <code>.</code> 在 0 号位。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">02</div><div><h2>数出来的模型：计数矩阵 N</h2><div class="sub">count_bigrams · 228,146 个样本</div></div></div>
+  <div class="stack">
+    <p>给每个名字前后补上 <code>.</code>，然后用 <code>zip(chs, chs[1:])</code> 滑窗取出所有相邻字符对，往 <code>N[i][j]</code> 上加一。32,033 个名字一共产出 228,146 个 bigram，填满这张 27×27 的表：</p>
+    <figure>
+      <div class="hm-outer"><div class="hm" id="hm"></div></div>
+      <div id="hm-read">把鼠标移到格子上看具体计数。</div>
+      <div class="hm-bar"><span>0</span><div class="hm-grad" id="grad"></div><span>6,763</span><span style="color:var(--ink3)">（按 √ 缩放）</span></div>
+      <figcaption>行 = 当前字符，列 = 下一个字符。第一行是「名字用什么开头」，第一列是「名字用什么结尾」。左上角 <code>N[0,0]=0</code>——没有空名字。729 个格子里有 102 个是 0，全部集中在辅音-辅音这类组合上。</figcaption>
+    </figure>
+    <p>排在最前面的几个 bigram 一眼就能看出英文名字的构词习惯：</p>
+    <div class="tw"><table>
+      <thead><tr><th>Bigram</th><th style="text-align:right">计数</th><th>读法</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">n .</td><td class="num">6,763</td><td>以 n 结尾（Ethan、Logan、Mason）</td></tr>
+        <tr><td class="mono">a .</td><td class="num">6,640</td><td>以 a 结尾（Emma、Olivia、Sophia）</td></tr>
+        <tr><td class="mono">a n</td><td class="num">5,438</td><td>-an- 组合</td></tr>
+        <tr><td class="mono">. a</td><td class="num">4,410</td><td>以 a 开头</td></tr>
+        <tr><td class="mono">e .</td><td class="num">3,983</td><td>以 e 结尾</td></tr>
+        <tr><td class="mono">a r</td><td class="num">3,264</td><td>-ar-</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">03</div><div><h2>归一化，和那个著名的广播陷阱</h2><div class="sub">normalize_counts</div></div></div>
+  <div class="stack">
+    <p>把计数变概率只需要一行：每行除以该行的和。但这一行是整节课踩坑最多的地方。</p>
+    <figure>
+<pre>P = (N + smoothing).float()
+P = P / P.sum(<span class="n">1</span>, keepdim=<span class="k">True</span>)   <span class="c"># (27,27) / (27,1)  ✅ 按行对齐</span>
+<span class="c"># P = P / P.sum(1)                 # (27,27) / (27,)  ❌ 被当成 (1,27)，按列对齐</span>
+</pre>
+      <figcaption>PyTorch 广播时会在形状左侧补 1。<code>(27,)</code> 会变成 <code>(1,27)</code> 然后沿<em>行</em>方向复制，于是你用「每行的和」去除了「每一列」——结果矩阵每行加起来不等于 1，而且不报错。写 <code>keepdim=True</code> 得到 <code>(27,1)</code>，才是按行复制。</figcaption>
+    </figure>
+    <p><code>smoothing</code> 是加法平滑（拉普拉斯平滑）：先给每个格子加个常数再归一化，把 0 概率抬到一个很小的正数。它的作用是防止模型在遇到训练集里没见过的字符对时给出 <code>-inf</code>。</p>
+    <div class="tw"><table>
+      <thead><tr><th>smoothing</th><th style="text-align:right">训练集 loss</th><th>效果</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">0</td><td class="num">2.4540</td><td>最贴合数据，但对未见过的 bigram 给出 −∞</td></tr>
+        <tr><td class="mono">1</td><td class="num">2.4546</td><td>默认值，代价几乎为零</td></tr>
+        <tr><td class="mono">10</td><td class="num">2.4621</td><td>开始变平</td></tr>
+        <tr><td class="mono">100</td><td class="num">2.5375</td><td>明显欠拟合，趋向均匀分布</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note">
+      <div class="t">容易误解的一点</div>
+      <p><code>smoothing=0</code> 在训练集上算 loss 并<em>不会</em>真的出现 −∞——因为训练集里出现过的 bigram 计数天然 ≥ 1。−∞ 只在你拿这个 P 去评估新数据、或者反过来问「jq 这个组合概率多少」时才炸。这也是为什么平滑属于泛化手段而不是数值技巧。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">04</div><div><h2>用什么衡量好坏：平均负对数似然</h2><div class="sub">nll_loss_from_P</div></div></div>
+  <div class="stack">
+    <p>训练目标的推导链条很短，但每一步都值得说清楚：</p>
+    <figure>
+<pre>最大化 似然       ∏ P[i,j]        <span class="c"># 连乘，很快下溢到 0</span>
+最大化 对数似然   Σ log P[i,j]    <span class="c"># log 单调递增，等价；连乘变连加</span>
+最小化 负对数似然 −Σ log P[i,j]   <span class="c"># 习惯上把「越小越好」作为 loss</span>
+最小化 平均 NLL   −Σ log P[i,j]/n <span class="c"># 除以样本数，与数据集大小无关</span>
+</pre>
+      <figcaption>取 log 不只是为了数学方便：228,146 个小于 1 的数连乘，float32 早就变成 0 了。</figcaption>
+    </figure>
+    <p>三个数字放在一起才有意义：</p>
+    <div class="tw"><table>
+      <thead><tr><th>模型</th><th style="text-align:right">平均 NLL</th><th style="text-align:right">困惑度 e^NLL</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td>均匀分布（瞎猜）</td><td class="num">3.2958</td><td class="num">27.0</td><td>每步都在 27 个字符里等概率乱选</td></tr>
+        <tr><td>Bigram 统计法</td><td class="num">2.4546</td><td class="num">11.6</td><td>每步的有效候选缩小到约 12 个</td></tr>
+        <tr><td>Bigram 神经网络</td><td class="num">2.4748</td><td class="num">11.9</td><td>100 步后尚未完全收敛</td></tr>
+      </tbody>
+    </table></div>
+    <p>ln 27 = 3.2958 是这个词表下的天花板，任何有意义的模型都必须低于它。bigram 只把困惑度从 27 降到 11.6——采样出来的名字仍然是「像名字的乱码」。后面几节课把上下文从 1 个字符扩到 3 个、再到 Transformer，本质上就是在继续压这个数。</p>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">05</div><div><h2>训出来的模型：一层线性网络</h2><div class="sub">build_dataset / forward / train</div></div></div>
+  <div class="stack">
+    <p>同一个模型换个写法：不再数数，而是维护一个 27×27 的可训练矩阵 <code>W</code>，让梯度下降自己找到它。前向传播四步：</p>
+    <figure>
+<pre>xenc   = F.one_hot(xs, num_classes=<span class="n">27</span>).float()  <span class="c"># (N,27) 必须转 float 才能做矩阵乘</span>
+logits = xenc @ W                              <span class="c"># 解释成 log-counts</span>
+counts = logits.exp()                          <span class="c"># 变回正数，等价于计数</span>
+probs  = counts / counts.sum(<span class="n">1</span>, keepdim=<span class="k">True</span>) <span class="c"># 按行归一化</span>
+</pre>
+      <figcaption>后两步合起来就是 softmax。这里同样要 <code>keepdim=True</code>——和第 03 节是同一个坑。</figcaption>
+    </figure>
+    <p>训练循环里有三个看起来奇怪、但都有理由的选择：</p>
+    <div class="tw"><table>
+      <thead><tr><th>写法</th><th>为什么</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">lr = 50</td><td>这个 loss 面极其平缓，且是凸的（单层 + softmax + 交叉熵），不存在震荡出去的风险。用 0.1 要跑几万步</td></tr>
+        <tr><td class="mono">W.grad = None</td><td>PyTorch 梯度是累加的，不清零会把上一步的梯度加进来。置 None 比置 0 稍快</td></tr>
+        <tr><td class="mono">W.data += ...</td><td>绕开 autograd 直接改数值。等价于 <code>with torch.no_grad():</code>，否则更新本身会被记进计算图</td></tr>
+      </tbody>
+    </table></div>
+    <figure id="chartfig">
+      <svg class="chart" id="chart" viewBox="0 0 720 330" role="img" aria-label="训练 200 步的 NLL 曲线，从 3.759 降到 2.4653"></svg>
+      <figcaption>整个数据集当一个 batch，200 步在 CPU 上只要 1.3 秒。前 20 步就吃掉了 80% 的下降空间，之后进入长尾——练习里跑 100 步（2.4750）主要是为了让 loss 和统计法「接近但不完全相等」，说明它确实是逼近而不是抄答案。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">06</div><div><h2>为什么两条路殊途同归</h2><div class="sub">本次分享的核心结论</div></div></div>
+  <div class="stack">
+    <div class="key">
+      <div class="t">一句话</div>
+      <p>one-hot 向量乘矩阵，等于<strong>取出矩阵的第 ix 行</strong>。所以这个「神经网络」根本没在做矩阵乘法，它做的是查表——和统计法查 <code>P[ix]</code> 是同一个动作。</p>
+    </div>
+    <p>把两边并排写，对应关系就完全暴露了：</p>
+    <div class="tw"><table>
+      <thead><tr><th>环节</th><th>统计法</th><th>神经网络</th></tr></thead>
+      <tbody>
+        <tr><td>取出这一行</td><td class="mono">N[ix]</td><td class="mono">one_hot(ix) @ W</td></tr>
+        <tr><td>保证为正</td><td>计数天然 ≥ 0</td><td class="mono">.exp()</td></tr>
+        <tr><td>归一化</td><td class="mono">/ sum(1, keepdim)</td><td class="mono">/ sum(1, keepdim)</td></tr>
+        <tr><td>防止 0 概率</td><td>加法平滑 <code>N+1</code></td><td>L2 正则 <code>reg*(W**2).mean()</code></td></tr>
+      </tbody>
+    </table></div>
+    <p>关键在于 <code>logits = xenc @ W</code> 被解释为 <strong>log-counts</strong>：如果令 <code>W = log(N)</code>，那么 <code>exp(logits)</code> 就精确等于计数矩阵，归一化后得到的正是统计法的 P。也就是说统计法给出的是这个优化问题的<em>解析解</em>，而梯度下降是在数值上朝它逼近。两者 loss 的 0.02 差距，就是「还没走到」的距离。</p>
+    <h3>正则项 = 平滑，这不是类比</h3>
+    <p>L2 正则把 W 往 0 拉。W 越接近 0，<code>logits</code> 越平坦，<code>exp</code> 之后各项越接近，概率分布越趋向均匀——效果和给计数矩阵每格加常数完全一致。把 <code>reg</code> 调大，就相当于把 <code>smoothing</code> 调大；调到极端，两边都会退化成均匀分布（loss 回到 3.2958）。同一个正则化思想，在两套语言里长成了两副样子。</p>
+    <div class="note">
+      <div class="t">那为什么还要用神经网络写法</div>
+      <p>对 bigram 而言，神经网络版本更慢、更复杂、结果还差一点点——它唯一的优势是<strong>可扩展</strong>。计数法在 trigram 上需要 27³ 个格子，四元组 27⁴，指数爆炸且大部分是 0；而 <code>forward</code> + <code>backward</code> 这套框架完全不变，换个更大的网络就能处理任意长的上下文。这正是后面几节课要走的路。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">07</div><div><h2>采样：两个模型说出同样的胡话</h2><div class="sub">sample_from_P / sample_from_W</div></div></div>
+  <div class="stack">
+    <p>从 <code>ix=0</code> 出发，用 <code>torch.multinomial</code> 按当前行的概率抽下一个字符，抽到 0 就停。两边用同一个种子 2147483647：</p>
+    <div class="samples">
+      <div class="scol"><h4>统计法 · P</h4><ol>
+        <li>cexze</li><li>momasurailezity<span class="diff">nn</span></li><li>konimittain</li><li>llayn</li><li>ka</li>
+      </ol></div>
+      <div class="scol"><h4>神经网络 · W</h4><ol>
+        <li>cexze</li><li>momasurailezity<span class="diff">ha</span></li><li>konimittain</li><li>llayn</li><li>ka</li>
+      </ol></div>
+    </div>
+    <p style="margin-top:16px">五个名字里四个逐字符相同，第二个在第 16 位分叉。这不是 bug：两张概率表最大单点差异是 0.078（集中在样本极少的行上），只要某一步的累积概率恰好落在差异区间里，<code>multinomial</code> 就会选出不同字符，此后随机数流错位，后缀彻底不同。<strong>前 15 个字符完全一致，恰恰是两个模型等价的最直观证据。</strong></p>
+    <div class="note">
+      <div class="t">实现细节</div>
+      <p><code>generator</code> 必须在循环<em>外</em>创建一次，5 个名字共用一条随机数流；放进循环里每次都 reseed，会得到 5 个一模一样的名字。另外 <code>sample_from_W</code> 里可以先把 27 行的 P 一次性算完再采样，不必每步都做一次 one-hot 矩阵乘。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">08</div><div><h2>复现与自检</h2><div class="sub">6 个断言检查点</div></div></div>
+  <div class="stack">
+    <figure>
+<pre>curl -O https://raw.githubusercontent.com/karpathy/makemore/master/names.txt
+python exercise/makemore_part1_bigrams_exercise.py</pre>
+    </figure>
+    <p>脚本逐节断言，任何一环写错都会在对应的检查点停下：</p>
+    <ul class="chk">
+      <li><span class="m">1/6</span><span><b>字符表</b> — <code>len(stoi)==27</code>、<code>stoi['.']==0</code>、<code>itos[26]=='z'</code></span></li>
+      <li><span class="m">2/6</span><span><b>计数</b> — <code>N.shape==(27,27)</code>、<code>N[0,0]==0</code>、<code>N[0,'a']==4410</code>（4,410 个名字以 a 开头）</span></li>
+      <li><span class="m">3/6</span><span><b>概率与 loss</b> — 每行和为 1，loss ≈ 2.4544。这里挂了八成是 <code>keepdim</code> 忘了写</span></li>
+      <li><span class="m">4/6</span><span><b>统计法采样</b> — 输出「像名字的乱码」即可；torch 各版本 multinomial 实现有差异，不必和视频逐字对齐</span></li>
+      <li><span class="m">5/6</span><span><b>网络训练</b> — 样本数 228,146，100 步后 loss &lt; 2.50</span></li>
+      <li><span class="m">6/6</span><span><b>网络采样</b> — 应与 4/6 的结果高度一致，这是全篇的收尾结论</span></li>
+    </ul>
+    <h3>如果想继续往下挖</h3>
+    <p>三个成本很低、收益很高的延伸实验：把 <code>steps</code> 提到 2000 看 loss 能否压到 2.4546 以下（会略低于统计法，因为正则强度和平滑强度并不严格相等）；把 <code>reg</code> 设为 0 再看采样结果；以及最有价值的一个——改成 trigram（用两个字符预测第三个），亲手感受一下计数法的 27³ 稀疏问题，这正是下一节 MLP 要解决的东西。</p>
+  </div>
+</section>
+
+<footer>
+  数据 32,033 names / 228,146 bigrams · torch CPU · seed 2147483647<br>
+  原课程：karpathy/nn-zero-to-hero · Lecture 2 · The spelled-out intro to language modeling
+</footer>
+</div>
+
+<script>
+const DATA =
+{"N":[[0,4410,1306,1542,1690,1531,417,669,874,591,2422,2963,1572,2538,1146,394,515,92,1639,2055,1308,78,376,307,134,535,929],[6640,556,541,470,1042,692,134,168,2332,1650,175,568,2528,1634,5438,63,82,60,3264,1118,687,381,834,161,182,2050,435],[114,321,38,1,65,655,0,0,41,217,1,0,103,0,4,105,0,0,842,8,2,45,0,0,0,83,0],[97,815,0,42,1,551,0,2,664,271,3,316,116,0,0,380,1,11,76,5,35,35,0,0,3,104,4],[516,1303,1,3,149,1283,5,25,118,674,9,3,60,30,31,378,0,1,424,29,4,92,17,23,0,317,1],[3983,679,121,153,384,1271,82,125,152,818,55,178,3248,769,2675,269,83,14,1958,861,580,69,463,50,132,1070,181],[80,242,0,0,0,123,44,1,1,160,0,2,20,0,4,60,0,0,114,6,18,10,0,4,0,14,2],[108,330,3,0,19,334,1,25,360,190,3,0,32,6,27,83,0,0,201,30,31,85,1,26,0,31,1],[2409,2244,8,2,24,674,2,2,1,729,9,29,185,117,138,287,1,1,204,31,71,166,39,10,0,213,20],[2489,2445,110,509,440,1653,101,428,95,82,76,445,1345,427,2126,588,53,52,849,1316,541,109,269,8,89,779,277],[71,1473,1,4,4,440,0,0,45,119,2,2,9,5,2,479,1,0,11,7,2,202,5,6,0,10,0],[363,1731,2,2,2,895,1,0,307,509,2,20,139,9,26,344,0,0,109,95,17,50,2,34,0,379,2],[1314,2623,52,25,138,2921,22,6,19,2480,6,24,1345,60,14,692,15,3,18,94,77,324,72,16,0,1588,10],[516,2590,112,51,24,818,1,0,5,1256,7,1,5,168,20,452,38,0,97,35,4,139,3,2,0,287,11],[6763,2977,8,213,704,1359,11,273,26,1725,44,58,195,19,1906,496,5,2,44,278,443,96,55,11,6,465,145],[855,149,140,114,190,132,34,44,171,69,16,68,619,261,2411,115,95,3,1059,504,118,275,176,114,45,103,54],[33,209,2,1,0,197,1,0,204,61,1,1,16,1,1,59,39,0,151,16,17,4,0,0,0,12,0],[28,13,0,0,0,1,0,0,0,13,0,0,1,2,0,2,0,0,1,2,0,206,0,3,0,0,0],[1377,2356,41,99,187,1697,9,76,121,3033,25,90,413,162,140,869,14,16,425,190,208,252,80,21,3,773,23],[1169,1201,21,60,9,884,2,2,1285,684,2,82,279,90,24,531,51,1,55,461,765,185,14,24,0,215,10],[483,1027,1,17,0,716,2,2,647,532,3,0,134,4,22,667,0,0,352,35,374,78,15,11,2,341,105],[155,163,103,103,136,169,19,47,58,121,14,93,301,154,275,10,16,10,414,474,82,3,37,86,34,13,45],[88,642,1,0,1,568,0,0,1,911,0,3,14,0,8,153,0,0,48,0,0,7,7,0,0,121,0],[51,280,1,0,8,149,2,1,23,148,0,6,13,2,58,36,0,0,22,20,8,25,0,2,0,73,1],[164,103,1,4,5,36,3,0,1,102,0,0,39,1,1,41,0,0,0,31,70,5,0,3,38,30,19],[2007,2143,27,115,272,301,12,30,22,192,23,86,1104,148,1826,271,15,6,291,401,104,141,106,4,28,23,78],[160,860,4,2,2,373,0,1,43,364,2,2,123,35,4,110,2,0,32,4,4,73,2,3,1,147,45]],"itos":[".","a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"],"curve":[3.759,3.3701,3.1528,3.0191,2.9264,2.8592,2.8086,2.769,2.737,2.7105,2.6881,2.6688,2.6522,2.6376,2.6248,2.6135,2.6034,2.5945,2.5865,2.5792,2.5727,2.5667,2.5613,2.5564,2.5518,2.5476,2.5437,2.5401,2.5367,2.5336,2.5307,2.5279,2.5254,2.523,2.5207,2.5186,2.5166,2.5147,2.5129,2.5112,2.5096,2.5081,2.5067,2.5053,2.504,2.5028,2.5016,2.5005,2.4994,2.4984,2.4974,2.4965,2.4956,2.4947,2.4939,2.4931,2.4923,2.4916,2.4909,2.4902,2.4895,2.4889,2.4883,2.4877,2.4871,2.4866,2.4861,2.4855,2.485,2.4846,2.4841,2.4836,2.4832,2.4828,2.4824,2.482,2.4816,2.4812,2.4808,2.4805,2.4801,2.4798,2.4795,2.4791,2.4788,2.4785,2.4782,2.4779,2.4777,2.4774,2.4771,2.4769,2.4766,2.4763,2.4761,2.4759,2.4756,2.4754,2.4752,2.475,2.4748,2.4746,2.4744,2.4742,2.474,2.4738,2.4736,2.4734,2.4732,2.4731,2.4729,2.4727,2.4726,2.4724,2.4722,2.4721,2.4719,2.4718,2.4716,2.4715,2.4714,2.4712,2.4711,2.471,2.4708,2.4707,2.4706,2.4705,2.4704,2.4702,2.4701,2.47,2.4699,2.4698,2.4697,2.4696,2.4695,2.4694,2.4693,2.4692,2.4691,2.469,2.4689,2.4688,2.4687,2.4686,2.4685,2.4684,2.4684,2.4683,2.4682,2.4681,2.468,2.468,2.4679,2.4678,2.4677,2.4676,2.4676,2.4675,2.4674,2.4674,2.4673,2.4672,2.4672,2.4671,2.467,2.467,2.4669,2.4668,2.4668,2.4667,2.4667,2.4666,2.4665,2.4665,2.4664,2.4664,2.4663,2.4663,2.4662,2.4662,2.4661,2.4661,2.466,2.466,2.4659,2.4659,2.4658,2.4658,2.4657,2.4657,2.4656,2.4656,2.4655,2.4655,2.4654,2.4654,2.4654,2.4653]};
+(function(){
+  const N = DATA.N, itos = DATA.itos, curve = DATA.curve;
+
+  // ---- heatmap ----
+  const max = Math.max(...N.flat());
+  const hm = document.getElementById('hm');
+  const frag = document.createDocumentFragment();
+  const corner = document.createElement('div'); corner.className='lab'; frag.appendChild(corner);
+  for(let j=0;j<27;j++){const d=document.createElement('div');d.className='lab';d.textContent=itos[j];frag.appendChild(d);}
+  for(let i=0;i<27;i++){
+    const r=document.createElement('div'); r.className='lab'; r.textContent=itos[i]; frag.appendChild(r);
+    for(let j=0;j<27;j++){
+      const c=document.createElement('div'); c.className='cell';
+      const t=Math.sqrt(N[i][j]/max);
+      c.style.setProperty('--t', (t===0?0:8+t*92).toFixed(1)+'%');
+      c.dataset.i=i; c.dataset.j=j;
+      frag.appendChild(c);
+    }
+  }
+  hm.appendChild(frag);
+  const read = document.getElementById('hm-read');
+  hm.addEventListener('mouseover', e=>{
+    const c=e.target.closest('.cell'); if(!c) return;
+    const i=+c.dataset.i, j=+c.dataset.j;
+    read.innerHTML = `<b>${itos[i]}${itos[j]}</b> &nbsp; N[${i},${j}] = ${N[i][j].toLocaleString()}`;
+  });
+  hm.addEventListener('mouseleave', ()=>{ read.textContent='把鼠标移到格子上看具体计数。'; });
+
+  // ---- training curve ----
+  const W=720,H=330,L=48,R=104,T=18,B=40;
+  const yMin=2.40,yMax=3.85;
+  const x=i=>L+(i/(curve.length-1))*(W-L-R);
+  const y=v=>T+((yMax-v)/(yMax-yMin))*(H-T-B);
+  let s='';
+  [2.4,2.8,3.2,3.6].forEach(v=>{
+    s+=`<line class="grid" x1="${L}" y1="${y(v).toFixed(1)}" x2="${W-R}" y2="${y(v).toFixed(1)}"/>`;
+    s+=`<text x="${L-9}" y="${(y(v)+3.5).toFixed(1)}" text-anchor="end">${v.toFixed(1)}</text>`;
+  });
+  [[0,'1'],[49,'50'],[99,'100'],[149,'150'],[199,'200']].forEach(([i,lab])=>{
+    s+=`<text x="${x(i).toFixed(1)}" y="${H-B+20}" text-anchor="middle">${lab}</text>`;
+  });
+  s+=`<text x="${((L+W-R)/2).toFixed(1)}" y="${H-4}" text-anchor="middle">梯度下降步数</text>`;
+  // reference lines
+  const refs=[[3.2958,'均匀分布 3.2958',''],[2.4546,'统计法 2.4546','em']];
+  refs.forEach(([v,lab,cl])=>{
+    s+=`<line class="ref" x1="${L}" y1="${y(v).toFixed(1)}" x2="${W-R}" y2="${y(v).toFixed(1)}"/>`;
+    s+=`<text class="${cl}" x="${W-R+8}" y="${(y(v)+3.5).toFixed(1)}">${lab}</text>`;
+  });
+  // area + line
+  let d='', a=`M ${x(0).toFixed(1)} ${y(yMin).toFixed(1)} `;
+  curve.forEach((v,i)=>{ const px=x(i).toFixed(1), py=y(v).toFixed(1);
+    d += (i?'L ':'M ')+px+' '+py+' '; a += `L ${px} ${py} `; });
+  a += `L ${x(curve.length-1).toFixed(1)} ${y(yMin).toFixed(1)} Z`;
+  s+=`<path class="ar" d="${a}"/><path class="ln" d="${d}"/>`;
+  // endpoints
+  s+=`<circle cx="${x(0).toFixed(1)}" cy="${y(curve[0]).toFixed(1)}" r="3" class="pt"/>`;
+  s+=`<text class="em" x="${(x(0)+9).toFixed(1)}" y="${(y(curve[0])+4).toFixed(1)}">3.7590</text>`;
+  const last=curve.length-1;
+  s+=`<circle cx="${x(last).toFixed(1)}" cy="${y(curve[last]).toFixed(1)}" r="3" class="pt"/>`;
+  s+=`<text class="em" x="${(x(last)+8).toFixed(1)}" y="${(y(curve[last])+15).toFixed(1)}">2.4653</text>`;
+  s+=`<circle cx="${x(99).toFixed(1)}" cy="${y(curve[99]).toFixed(1)}" r="2.5" class="pt"/>`;
+  s+=`<text x="${x(99).toFixed(1)}" y="${(y(curve[99])-9).toFixed(1)}" text-anchor="middle">100 步 · 2.4750</text>`;
+  document.getElementById('chart').innerHTML=s;
+})();
+</script>
