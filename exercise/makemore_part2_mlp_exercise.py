@@ -110,8 +110,17 @@ def build_dataset(words, stoi, block_size=BLOCK_SIZE):
 
     注意最后一条：上下文 'mma' 要预测结束符 '.'，这是模型学会"何时停下"的关键。
     """
-    # TODO: 实现数据集构造
-    raise NotImplementedError("build_dataset")
+    # 实现数据集构造
+    context = [0, 0, 0]
+    x = []
+    y = []
+    for _, ch in enumerate(words):
+        ix = stoi[ch]
+        x.append(context)
+        y.append(ix)
+        context = context[1:]
+        context.append(ix)
+    return torch.tensor(x), torch.tensor(y)
 
 
 def split_words(words, seed=42):
