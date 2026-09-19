@@ -115,7 +115,7 @@ def build_dataset(words, stoi, block_size=BLOCK_SIZE):
     X = []
     Y = []
     for word in words:
-        context = [0, 0, 0]
+        context = [0] * block_size
         for ch in word + '.':
             ix = stoi[ch]
             X.append(context)
@@ -272,9 +272,12 @@ def train(Xtr, Ytr, params, steps=100000, batch_size=32, lr=0.1, lr_decay_at=0.6
     """
     # 实现训练循环
     g = torch.Generator().manual_seed(seed)
+    N = Xtr.shape[0]
     losses = []
     for i in range(steps):
-        ix = torch.randint(0, Xtr.shape[0], (batch_size,), generator=g)
+        # ix是(batch_size,)
+        ix = torch.randint(0, N, (batch_size,), generator=g)
+        # Xtr[ix]的维度是 (batch_size,block_size)
         logit = forward(Xtr[ix], params)
         loss = F.cross_entropy(logit, Ytr[ix])
         # backward
@@ -284,8 +287,6 @@ def train(Xtr, Ytr, params, steps=100000, batch_size=32, lr=0.1, lr_decay_at=0.6
         losses.append(loss.item())
         # update
         for p in params:
-            if lr <= lr_decay_at:
-                lr = lr * decay_factor
             p.data += -lr * p.grad
     return losses
 
@@ -366,8 +367,24 @@ def sample(params, itos, num=20, block_size=BLOCK_SIZE, seed=SEED + 10):
 
     这个模型采样出来的名字（carmah、amelle、khi …）明显比 part1 的 bigram 更像名字了。
     """
-    # TODO: 实现采样
-    raise NotImplementedError("sample")
+    # 实现采样
+    g = torch.Generator().manual_seed(seed)
+    name_list = []
+    for i in range(num):
+        context = [0] * block_size
+        name = []
+        while True:
+            X = torch.tensor([context])
+            logits = forward(X, params)
+            probs = F.softmax(logits, dim=1)
+            ix = torch.multinomial(probs, num_samples=1, replacement=True, generator=g).item()
+            context = context[1:]
+            context.append(ix)
+            if ix == 0:
+                name_list.append(''.join(name))
+                break
+            name.append(itos[ix])
+    return name_list
 
 
 # ---------------------------------------------------------------------------
