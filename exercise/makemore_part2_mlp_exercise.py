@@ -289,6 +289,7 @@ def train(Xtr, Ytr, params, steps=100000, batch_size=32, lr=0.1, lr_decay_at=0.6
             p.data += -lr * p.grad
     return losses
 
+
 @torch.no_grad()
 def split_loss(X, Y, params):
     """
@@ -299,8 +300,10 @@ def split_loss(X, Y, params):
         省显存也更快（评估阶段不需要反向传播）；
       - 返回 .item() 而不是张量。
     """
-    # TODO: 实现 split 上的 loss 评估
-    raise NotImplementedError("split_loss")
+    # 实现 split 上的 loss 评估
+    logit = forward(X, params)
+    loss = F.cross_entropy(logit, Y)
+    return loss.item()
 
 
 # ---------------------------------------------------------------------------
@@ -322,12 +325,25 @@ def find_lr(Xtr, Ytr, steps=1000, lr_min=-3, lr_max=0, seed=SEED):
     "震荡开始前的那个 lr" 就是比较合适的取值。这就是课程里得到 lr≈0.1 的方法。
     """
     # 实现学习率扫描
-    lrs = torch.linspace(lr_min, lr_max, steps)
+    batch_size = 32
+    g = torch.Generator().manual_seed(seed)
+    lre = torch.linspace(lr_min, lr_max, steps)
+    lrs = 10 ** lre
     losses = []
-    for lr in lrs:
-        params = init_params()
-        lossi = train(Xtr, Ytr, params, steps=steps, lr=lr)
-        losses.append(lossi)
+    params = init_params()
+    for i in range(steps):
+        ix = torch.randint(0, Xtr.shape[0], (batch_size,), generator=g)
+        logit = forward(Xtr[ix], params)
+        loss = F.cross_entropy(logit, Ytr[ix])
+        # backward
+        for p in params:
+            p.grad = None
+        loss.backward()
+        losses.append(loss.item())
+        lr = lrs[i]
+        # update
+        for p in params:
+            p.data += -lr * p.grad
     return lrs, losses
 
 
