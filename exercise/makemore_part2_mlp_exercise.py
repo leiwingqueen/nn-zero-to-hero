@@ -45,7 +45,7 @@ import random
 
 import torch
 import torch.nn.functional as F
-from babel.dates import format_interval
+from matplotlib import pyplot as plt
 
 # 固定随机种子，保证结果可复现（课程里用的就是这个数）
 SEED = 2147483647
@@ -274,6 +274,7 @@ def train(Xtr, Ytr, params, steps=100000, batch_size=32, lr=0.1, lr_decay_at=0.6
     g = torch.Generator().manual_seed(seed)
     N = Xtr.shape[0]
     losses = []
+    decay = lr_decay_at * steps
     for i in range(steps):
         # ix是(batch_size,)
         ix = torch.randint(0, N, (batch_size,), generator=g)
@@ -286,6 +287,8 @@ def train(Xtr, Ytr, params, steps=100000, batch_size=32, lr=0.1, lr_decay_at=0.6
         loss.backward()
         losses.append(loss.item())
         # update
+        if i >= decay:
+            lr *= decay_factor
         for p in params:
             p.data += -lr * p.grad
     return losses
@@ -329,9 +332,9 @@ def find_lr(Xtr, Ytr, steps=1000, lr_min=-3, lr_max=0, seed=SEED):
     batch_size = 32
     g = torch.Generator().manual_seed(seed)
     lre = torch.linspace(lr_min, lr_max, steps)
-    lrs = 10 ** lre
+    lrs = (10 ** lre).tolist()
     losses = []
-    params = init_params()
+    params = init_params(seed=seed)
     for i in range(steps):
         ix = torch.randint(0, Xtr.shape[0], (batch_size,), generator=g)
         logit = forward(Xtr[ix], params)
