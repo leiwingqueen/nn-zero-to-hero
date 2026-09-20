@@ -287,10 +287,9 @@ def train(Xtr, Ytr, params, steps=100000, batch_size=32, lr=0.1, lr_decay_at=0.6
         loss.backward()
         losses.append(loss.item())
         # update
-        if i >= decay:
-            lr *= decay_factor
+        lr_i = lr if i < decay else lr * decay_factor
         for p in params:
-            p.data += -lr * p.grad
+            p.data += -lr_i * p.grad
     return losses
 
 
