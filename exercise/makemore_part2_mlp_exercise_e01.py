@@ -48,22 +48,22 @@ import torch.nn.functional as F
 from matplotlib import pyplot as plt
 
 # 固定随机种子，保证结果可复现（课程里用的就是这个数）
-SEED = 2147483647
+SEED = 2147483646
 
 # 词表大小：26 个字母 + 1 个特殊 token '.'（同时表示开始和结束）
 VOCAB_SIZE = 27
 
 # 上下文长度：用前 block_size 个字符预测下一个字符
-BLOCK_SIZE = 3
+BLOCK_SIZE = 5
 
 # 每个字符 embedding 的维度（课程里先用 2 方便可视化，后来调成 10）
 N_EMB = 20
 
 # 隐藏层神经元个数
-N_HIDDEN = 200
+N_HIDDEN = 300
 
 # 训练部署
-TRAIN_STEP = 300_000
+TRAIN_STEP = 400_000
 
 
 # ---------------------------------------------------------------------------
@@ -345,7 +345,7 @@ def find_lr(Xtr, Ytr, steps=1000, lr_min=-3, lr_max=0, seed=SEED):
         for p in params:
             p.grad = None
         loss.backward()
-        losses.append(loss.item())
+        losses.append(loss.log10().item())
         lr = lrs[i]
         # update
         for p in params:
@@ -414,13 +414,15 @@ def main():
 
     # --- 4. 学习率搜索 ---
     lrs, losses = find_lr(Xtr, Ytr, steps=1000)
+    plt.plot(lrs, losses)
+    plt.show()
 
     # --- 5. 训练 ---
     print(f"      开始训练 {TRAIN_STEP} 步（CPU 约 25 秒）...")
     lossi = train(Xtr, Ytr, params, steps=TRAIN_STEP, lr=0.1)
     l_tr = split_loss(Xtr, Ytr, params)
     l_dev = split_loss(Xdev, Ydev, params)
-    print(f"      train loss = {l_tr:.4f}   dev loss = {l_dev:.4f}")
+    print(f"      train loss = {l_tr:.4f}   dev loss = {l_dev:.4f}, l_dev - l_tr = {l_dev-l_tr:.4f}")
     # part1 的 bigram 只能做到 2.45 左右，MLP 明显更好
     assert l_tr < 2.30, f"train loss 期望低于 2.30，实际 {l_tr:.4f}"
     assert l_dev < 2.32, f"dev loss 期望低于 2.32，实际 {l_dev:.4f}"
