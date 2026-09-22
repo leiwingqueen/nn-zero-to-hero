@@ -65,6 +65,10 @@ N_HIDDEN = 300
 # 训练部署
 TRAIN_STEP = 400_000
 
+LEARNING_RATE = 0.1
+
+BATCH_SIZ = 64
+
 
 # ---------------------------------------------------------------------------
 # 0. 读数据 + 字符表（part1 已经练过，这里直接给出实现）
@@ -174,10 +178,10 @@ def init_params(seed=SEED, block_size=BLOCK_SIZE, n_emb=N_EMB, n_hidden=N_HIDDEN
     # 实现参数初始化
     g = torch.Generator().manual_seed(seed)
     C = torch.randn(VOCAB_SIZE, n_emb, generator=g)
-    W1 = torch.randn(block_size * n_emb, n_hidden, generator=g)
-    b1 = torch.randn(n_hidden, generator=g)
-    W2 = torch.randn(n_hidden, VOCAB_SIZE, generator=g)
-    b2 = torch.randn(VOCAB_SIZE, generator=g)
+    W1 = torch.randn(block_size * n_emb, n_hidden, generator=g) * (5 / 3) / (block_size * n_emb) ** 0.5
+    b1 = torch.randn(n_hidden, generator=g) * 0.01
+    W2 = torch.randn(n_hidden, VOCAB_SIZE, generator=g) * 0.01
+    b2 = torch.randn(VOCAB_SIZE, generator=g) * 0
     parameters = [C, W1, b1, W2, b2]
     for param in parameters:
         param.requires_grad = True
@@ -289,6 +293,8 @@ def train(Xtr, Ytr, params, steps=100000, batch_size=32, lr=0.1, lr_decay_at=0.6
             p.grad = None
         loss.backward()
         losses.append(loss.item())
+        if i == 0:
+            print(f"first step loss:{loss.item():.4f}")
         # update
         lr_i = lr if i < decay else lr * decay_factor
         for p in params:
@@ -419,10 +425,10 @@ def main():
 
     # --- 5. 训练 ---
     print(f"      开始训练 {TRAIN_STEP} 步（CPU 约 25 秒）...")
-    lossi = train(Xtr, Ytr, params, steps=TRAIN_STEP, lr=0.1)
+    lossi = train(Xtr, Ytr, params, steps=TRAIN_STEP, batch_size=BLOCK_SIZE, lr=LEARNING_RATE)
     l_tr = split_loss(Xtr, Ytr, params)
     l_dev = split_loss(Xdev, Ydev, params)
-    print(f"      train loss = {l_tr:.4f}   dev loss = {l_dev:.4f}, l_dev - l_tr = {l_dev-l_tr:.4f}")
+    print(f"      train loss = {l_tr:.4f}   dev loss = {l_dev:.4f}, l_dev - l_tr = {l_dev - l_tr:.4f}")
     # part1 的 bigram 只能做到 2.45 左右，MLP 明显更好
     assert l_tr < 2.30, f"train loss 期望低于 2.30，实际 {l_tr:.4f}"
     assert l_dev < 2.32, f"dev loss 期望低于 2.32，实际 {l_dev:.4f}"
@@ -439,7 +445,7 @@ def main():
     print("[6/6] 采样 OK")
 
     print(f"\n全部通过 🎉  dev loss {l_dev:.4f}（part1 的 bigram 是 2.4544）")
-    # print("test loss 留到最后一次性揭晓:", f"{split_loss(Xte, Yte, params):.4f}")
+    print("test loss 留到最后一次性揭晓:", f"{split_loss(Xte, Yte, params):.4f}")
     print("\n接着往下做进阶练习（见文件末尾 E01 / E02 / E03）👇")
 
 

@@ -33,7 +33,15 @@ dev loss-train loss增加到0.0905，overfiting的信号更明显了。
 | ---------- | ----- | -------- | ---------- | ---------- | -------- | ------------------- |
 | 3          | 20    | 300      | 300,000    | 2.1260     | 2.1966   | 0.0705              |
 
-不幸的是train loss变高了，但是万幸的是dev loss-train loss降低了。猜测是由于context的增加，训练的learning rate和训练部署也要对应调整。
+不幸的是train loss变高了，但是万幸的是dev loss-train loss降低了。猜测是由于context的增加，训练的learning rate和训练步数对应调整。
+
+最终调参得到的训练结果
+
+| BLOCK_SIZE | N_EMB | N_HIDDEN | TRAIN_STEP | train loss | dev loss | dev loss-train loss |
+| ---------- | ----- | -------- | ---------- | ---------- | -------- | ------------------- |
+| 3          | 20    | 300      | 400,000    | 2.0905     | 2.1258   | 0.0353              |
+
+
 
 
 
