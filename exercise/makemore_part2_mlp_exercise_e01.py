@@ -63,11 +63,11 @@ N_EMB = 20
 N_HIDDEN = 300
 
 # 训练部署
-TRAIN_STEP = 400_000
+TRAIN_STEP = 300_000
 
 LEARNING_RATE = 0.1
 
-BATCH_SIZ = 64
+BATCH_SIZE = 64
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +425,7 @@ def main():
 
     # --- 5. 训练 ---
     print(f"      开始训练 {TRAIN_STEP} 步（CPU 约 25 秒）...")
-    lossi = train(Xtr, Ytr, params, steps=TRAIN_STEP, batch_size=BLOCK_SIZE, lr=LEARNING_RATE)
+    lossi = train(Xtr, Ytr, params, steps=TRAIN_STEP, batch_size=BATCH_SIZE, lr=LEARNING_RATE)
     l_tr = split_loss(Xtr, Ytr, params)
     l_dev = split_loss(Xdev, Ydev, params)
     print(f"      train loss = {l_tr:.4f}   dev loss = {l_dev:.4f}, l_dev - l_tr = {l_dev - l_tr:.4f}")

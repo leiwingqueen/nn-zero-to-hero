@@ -48,26 +48,26 @@ import torch.nn.functional as F
 from matplotlib import pyplot as plt
 
 # 固定随机种子，保证结果可复现（课程里用的就是这个数）
-SEED = 2147483646
+SEED = 2147483647
 
 # 词表大小：26 个字母 + 1 个特殊 token '.'（同时表示开始和结束）
 VOCAB_SIZE = 27
 
 # 上下文长度：用前 block_size 个字符预测下一个字符
-BLOCK_SIZE = 5
+BLOCK_SIZE = 3
 
 # 每个字符 embedding 的维度（课程里先用 2 方便可视化，后来调成 10）
 N_EMB = 2
 
 # 隐藏层神经元个数
-N_HIDDEN = 300
+N_HIDDEN = 200
 
 # 训练部署
 TRAIN_STEP = 100_000
 
 LEARNING_RATE = 0.1
 
-BATCH_SIZ = 64
+BATCH_SIZE = 32
 
 
 # ---------------------------------------------------------------------------
@@ -178,10 +178,10 @@ def init_params(seed=SEED, block_size=BLOCK_SIZE, n_emb=N_EMB, n_hidden=N_HIDDEN
     # 实现参数初始化
     g = torch.Generator().manual_seed(seed)
     C = torch.randn(VOCAB_SIZE, n_emb, generator=g)
-    W1 = torch.randn(block_size * n_emb, n_hidden, generator=g) * (5 / 3) / (block_size * n_emb) ** 0.5
-    b1 = torch.randn(n_hidden, generator=g) * 0.01
-    W2 = torch.randn(n_hidden, VOCAB_SIZE, generator=g) * 0.01
-    b2 = torch.randn(VOCAB_SIZE, generator=g) * 0
+    W1 = torch.randn(block_size * n_emb, n_hidden, generator=g)
+    b1 = torch.randn(n_hidden, generator=g)
+    W2 = torch.randn(n_hidden, VOCAB_SIZE, generator=g)
+    b2 = torch.randn(VOCAB_SIZE, generator=g)
     parameters = [C, W1, b1, W2, b2]
     for param in parameters:
         param.requires_grad = True
@@ -425,7 +425,7 @@ def main():
 
     # --- 5. 训练 ---
     print(f"      开始训练 {TRAIN_STEP} 步（CPU 约 25 秒）...")
-    lossi = train(Xtr, Ytr, params, steps=TRAIN_STEP, batch_size=BLOCK_SIZE, lr=LEARNING_RATE)
+    lossi = train(Xtr, Ytr, params, steps=TRAIN_STEP, batch_size=BATCH_SIZE, lr=LEARNING_RATE)
     l_tr = split_loss(Xtr, Ytr, params)
     l_dev = split_loss(Xdev, Ydev, params)
     print(f"      train loss = {l_tr:.4f}   dev loss = {l_dev:.4f}, l_dev - l_tr = {l_dev - l_tr:.4f}")
@@ -437,6 +437,7 @@ def main():
     plt.scatter(C[:, 0].data, C[:, 1].data, s=200)
     for i in range(C.shape[0]):
         plt.text(C[i, 0].item(), C[i, 1].item(), itos[i], ha="center", va="center")
+    plt.gca().set_aspect('equal')
     plt.show()
 
     # --- 6. 采样 ---
