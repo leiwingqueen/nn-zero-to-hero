@@ -40,6 +40,7 @@ tanh 隐藏层大量饱和，网络前几千步都在白白浪费。网络只有
 import math
 import os
 import random
+from math import sqrt
 
 import torch
 import torch.nn.functional as F
@@ -115,8 +116,10 @@ def expected_init_loss(vocab_size=VOCAB_SIZE):
     如果你的网络初始 loss 是 27（part2 就是这样），说明它在一开始就
     "非常自信地给出了错误答案" —— logits 的数值太大，softmax 被推向了极端。
     """
-    # TODO: 实现 expected_init_loss
-    raise NotImplementedError("expected_init_loss")
+    # 实现 expected_init_loss
+    logits = torch.zeros(vocab_size)
+    loss = F.cross_entropy(logits, torch.zeros(1, dtype=torch.long))
+    return loss
 
 
 def init_mlp(scheme="kaiming", seed=SEED, n_emb=N_EMB, n_hidden=N_HIDDEN, block_size=BLOCK_SIZE):
@@ -140,8 +143,30 @@ def init_mlp(scheme="kaiming", seed=SEED, n_emb=N_EMB, n_hidden=N_HIDDEN, block_
     提示：缩放要在设置 requires_grad 之前做，或者放在 torch.no_grad() 里做，
           否则缩放后的张量不再是叶子节点，.grad 会是 None。
     """
-    # TODO: 实现 init_mlp
-    raise NotImplementedError("init_mlp")
+    # 实现 init_mlp
+    g = torch.Generator().manual_seed(seed)
+    C = torch.randn(VOCAB_SIZE, n_emb, generator=g)
+    W1 = torch.randn(block_size * n_emb, n_hidden, generator=g)
+    b1 = torch.randn(n_hidden, generator=g)
+    W2 = torch.randn(n_hidden, VOCAB_SIZE, generator=g)
+    b2 = torch.randn(VOCAB_SIZE, generator=g)
+    match scheme:
+        case "naive":
+            print("init mlp naive")
+        case "fix_softmax":
+            W2 *= 0.01
+            b2 *= 0
+            print("init mlp fix_softmax")
+        case "fix_tanh":
+            W1 *= 0.2
+            b1 *= 0.01
+            print("init mlp fix_tanh")
+        case "kaiming":
+            W1 *= kaiming_std(fan_in=n_emb * block_size, nonlinearity="tanh")
+            b1 *= 0.01
+            print("init mlp kaiming")
+    parameters = [C, W1, b1, W2, b2]
+    return parameters
 
 
 def mlp_forward(X, params):
@@ -209,9 +234,18 @@ def kaiming_std(fan_in, nonlinearity="tanh"):
     这些数字和 torch.nn.init.calculate_gain 一致。
     未知的 nonlinearity 请 raise ValueError。
     """
-    # TODO: 实现 kaiming_std
-    raise NotImplementedError("kaiming_std")
-
+    # 实现 kaiming_std
+    gain = 1
+    match nonlinearity:
+        case "linear":
+            gain = 1
+        case "tanh":
+            gain = 5 / 3
+        case "relu":
+            gain = sqrt(2)
+        case _:
+            raise ValueError
+    return gain/sqrt(fan_in)
 
 # ---------------------------------------------------------------------------
 # 3. 手写 BatchNorm（单隐藏层 MLP 版）
@@ -545,6 +579,7 @@ def main():
     # --- 1. 初始 loss ---
     exp_loss = expected_init_loss()
     assert abs(exp_loss - 3.2958) < 1e-3, f"期望初始 loss ≈ 3.2958，实际 {exp_loss}"
+    print(f"期望初始loss={exp_loss}")
     Xb, Yb = Xtr[:1000], Ytr[:1000]
     init_losses = {}
     for scheme in ["naive", "fix_softmax", "fix_tanh", "kaiming"]:
@@ -755,4 +790,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
