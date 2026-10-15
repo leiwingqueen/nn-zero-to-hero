@@ -44,6 +44,7 @@ from math import sqrt
 
 import torch
 import torch.nn.functional as F
+from torch._C import dtype
 
 # 固定随机种子，保证结果可复现（课程里用的就是这个数）
 SEED = 2147483647
@@ -158,14 +159,20 @@ def init_mlp(scheme="kaiming", seed=SEED, n_emb=N_EMB, n_hidden=N_HIDDEN, block_
             b2 *= 0
             print("init mlp fix_softmax")
         case "fix_tanh":
+            W2 *= 0.01
+            b2 *= 0
             W1 *= 0.2
             b1 *= 0.01
             print("init mlp fix_tanh")
         case "kaiming":
+            W2 *= 0.01
+            b2 *= 0
             W1 *= kaiming_std(fan_in=n_emb * block_size, nonlinearity="tanh")
             b1 *= 0.01
             print("init mlp kaiming")
     parameters = [C, W1, b1, W2, b2]
+    for param in parameters:
+        param.requires_grad = True
     return parameters
 
 
@@ -200,8 +207,17 @@ def tanh_saturation(h, thresh=0.97):
     plt.imshow(h.abs() > 0.99, cmap='gray') 来直观感受，
     naive 初始化下直方图几乎全堆在 -1 和 +1 两端。
     """
-    # TODO: 实现 tanh_saturation
-    raise NotImplementedError("tanh_saturation")
+    # 实现 tanh_saturation
+    """
+    l = h.view(-1).abs().tolist()
+    cnt = 0
+    for _, num in enumerate(l):
+        if num > thresh:
+            cnt += 1
+    return cnt / len(l)
+    """
+    # 还有一个更骚的写法
+    return (h.abs() > thresh).float().mean().item()
 
 
 def dead_neurons(h, thresh=0.99):
@@ -214,9 +230,8 @@ def dead_neurons(h, thresh=0.99):
 
     提示：(...).all(dim=0) 可以沿 batch 维做"全部为真"的判断。
     """
-    # TODO: 实现 dead_neurons
-    raise NotImplementedError("dead_neurons")
-
+    # 实现 dead_neurons
+    return (h.abs() > thresh).float().all(dim=0).float().sum().item()
 
 def kaiming_std(fan_in, nonlinearity="tanh"):
     """
@@ -245,7 +260,8 @@ def kaiming_std(fan_in, nonlinearity="tanh"):
             gain = sqrt(2)
         case _:
             raise ValueError
-    return gain/sqrt(fan_in)
+    return gain / sqrt(fan_in)
+
 
 # ---------------------------------------------------------------------------
 # 3. 手写 BatchNorm（单隐藏层 MLP 版）
