@@ -231,7 +231,8 @@ def dead_neurons(h, thresh=0.99):
     提示：(...).all(dim=0) 可以沿 batch 维做"全部为真"的判断。
     """
     # 实现 dead_neurons
-    return (h.abs() > thresh).float().all(dim=0).float().sum().item()
+    return (h.abs() > thresh).all(dim=0).int().sum().item()
+
 
 def kaiming_std(fan_in, nonlinearity="tanh"):
     """
@@ -326,8 +327,32 @@ def bn_mlp_forward(X, params, buffers, training=True, momentum=BN_MOMENTUM, eps=
     ⚠️ 为什么 buffer 的更新要放在 no_grad 里？它不是参数，不该进计算图。
     ⚠️ 为什么要加 eps？如果某个神经元在 batch 内恰好输出全一样，var=0，会除以 0。
     """
-    # TODO: 实现 bn_mlp_forward
-    raise NotImplementedError("bn_mlp_forward")
+    # 实现 bn_mlp_forward
+    N = X.shape[0]
+    C = params[0]
+    W1 = params[1]
+    W2 = params[2]
+    b2 = params[3]
+    bngain = params[4]
+    bnbias = params[5]
+    # (N,block_size,n_emb)
+    emb = C[X]
+    # (N,n_hidden)
+    hpreact = emb.view(N, -1) @ W1
+    # BatchNorm
+    if training:
+        mean = hpreact.mean(0, keepdim=True)  # (1, n_hidden)，每个神经元在 batch 上的均值
+        var = hpreact.var(0, keepdim=True)  # (1, n_hidden)
+        with torch.no_grad():
+            buffers["mean"] = (1 - momentum) * buffers["mean"] + momentum * mean
+            buffers["var"] = (1 - momentum) * buffers["var"] + momentum * var
+    else:
+        mean = buffers["mean"]
+        var = buffers["var"]
+    hpreact = bngain * (hpreact - mean) / torch.sqrt(var + eps) + bnbias
+    h = torch.tanh(hpreact)
+    logits = h @ W2 + b2
+    return logits
 
 
 @torch.no_grad()
