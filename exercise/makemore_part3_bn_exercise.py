@@ -522,8 +522,36 @@ def build_deep_net(n_layers=5, n_hidden=100, use_bn=True, gain=5 / 3, seed=SEED,
 
     ⚠️ Linear 后面紧跟 BatchNorm 时为什么 bias=False？见 init_bn_mlp 的说明。
     """
-    # TODO: 实现 build_deep_net
-    raise NotImplementedError("build_deep_net")
+    # 实现 build_deep_net
+    g = torch.Generator().manual_seed(seed)
+    C = torch.randn((VOCAB_SIZE, n_emb), generator=g)
+    layers = []
+    for i in range(n_layers):
+        if i == 0:
+            layers += [Linear(n_emb * block_size, n_hidden, bias=not use_bn)] + (
+                [BatchNorm1d(n_hidden)] if use_bn else []) + [
+                          Tanh()]
+        else:
+            layers += [Linear(n_hidden, n_hidden, bias=not use_bn)] + ([BatchNorm1d(n_hidden)] if use_bn else []) + [
+                Tanh()]
+    with torch.no_grad():
+        for layer in layers:
+            if isinstance(layer, Linear):
+                layer.weight *= gain
+    layers += [Linear(n_hidden, VOCAB_SIZE, bias=not use_bn)] + ([BatchNorm1d(VOCAB_SIZE)] if use_bn else [])
+    with torch.no_grad():
+        if use_bn:
+            last: BatchNorm1d = layers[-1]
+            last.gamma *= 0.1
+        else:
+            last: Linear = layers[-2]
+            last.weight *= 0.1
+    params = [C]
+    for layer in layers:
+        params += layer.parameters()
+    for param in params:
+        param.requires_grad = True
+    return C, layers, params
 
 
 def deep_forward(X, C, layers):
