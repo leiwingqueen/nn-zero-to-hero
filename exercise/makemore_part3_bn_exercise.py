@@ -544,7 +544,7 @@ def build_deep_net(n_layers=5, n_hidden=100, use_bn=True, gain=5 / 3, seed=SEED,
             last: BatchNorm1d = layers[-1]
             last.gamma *= 0.1
         else:
-            last: Linear = layers[-2]
+            last: Linear = layers[-1]
             last.weight *= 0.1
     params = [C]
     for layer in layers:
@@ -583,8 +583,13 @@ def activation_stats(layers, thresh=0.97):
     健康的网络：各层 std 大致相同（不逐层缩小，也不逐层放大），饱和率在 5% 左右。
     课程里还会用 torch.histogram 把每层分布画成曲线叠在一起看。
     """
-    # TODO: 实现 activation_stats
-    raise NotImplementedError("activation_stats")
+    # 实现 activation_stats
+    stats = []
+    for layer in layers:
+        if isinstance(layer, Tanh):
+            stats.append({"mean": layer.out.mean(), "std": layer.out.std(),
+                          "saturated": tanh_saturation(layer.out, thresh)})
+    return stats
 
 
 def grad_stats(layers):
@@ -598,9 +603,12 @@ def grad_stats(layers):
     健康的网络：各层梯度的 std 也大致相同。
     如果从后往前逐层变小 -> 梯度消失；逐层变大 -> 梯度爆炸。
     """
-    # TODO: 实现 grad_stats
-    raise NotImplementedError("grad_stats")
-
+    # 实现 grad_stats
+    stats = []
+    for layer in layers:
+        if isinstance(layer, Tanh):
+            stats.append(layer.out.grad.std())
+    return stats
 
 def grad_data_ratio(p):
     """
