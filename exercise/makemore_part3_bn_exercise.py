@@ -365,8 +365,16 @@ def calibrate_bn(Xtr, params):
     滑动平均（buffers）就是为了省掉这一步 —— 训练过程中顺手估出来。
     主流程会验证两者非常接近。
     """
-    # TODO: 实现 calibrate_bn
-    raise NotImplementedError("calibrate_bn")
+    # 实现 calibrate_bn
+    N = Xtr.shape[0]
+    C = params[0]
+    W1 = params[1]
+    emb = C[Xtr]
+    # (N,n_hidden)
+    hpreact = emb.view(N, -1) @ W1
+    mean = hpreact.mean(0, keepdim=True)
+    var = hpreact.var(0, keepdim=True)
+    return {"mean": mean, "var": var}
 
 
 def train_loop(Xtr, Ytr, parameters, forward_fn, steps, batch_size=32, lr=0.1,
@@ -410,17 +418,24 @@ class Linear:
                 （即 gain=1 的 Kaiming；需要别的 gain 时由外部再乘）
         bias:   (fan_out,)，初始化为 0；bias=False 时为 None
         """
-        # TODO: 实现 Linear.__init__
-        raise NotImplementedError("Linear.__init__")
+        # 实现 Linear.__init__
+        self.weight = torch.randn((fan_in, fan_out), generator=generator) / sqrt(fan_in)
+        if bias:
+            self.bias = torch.zeros(fan_out)
+        else:
+            self.bias = None
 
     def __call__(self, x):
         """out = x @ weight (+ bias)，存进 self.out 并返回。"""
-        # TODO: 实现 Linear.__call__
-        raise NotImplementedError("Linear.__call__")
+        # 实现 Linear.__call__
+        self.out = x @ self.weight
+        if self.bias is not None:
+            self.out += self.bias
+        return self.out
 
     def parameters(self):
-        # TODO: 实现 Linear.parameters
-        raise NotImplementedError("Linear.parameters")
+        # 实现 Linear.parameters
+        return [self.weight] + ([] if self.bias is None else [self.bias])
 
 
 class BatchNorm1d:
@@ -438,8 +453,14 @@ class BatchNorm1d:
         momentum=0.1 是 PyTorch 的默认值。手写版用 0.001 是因为 batch 太小统计量太抖；
         batch 大一些时 0.1 就够了。
         """
-        # TODO: 实现 BatchNorm1d.__init__
-        raise NotImplementedError("BatchNorm1d.__init__")
+        # 实现 BatchNorm1d.__init__
+        self.eps = eps
+        self.training = True
+        self.momentum = momentum
+        self.gamma = torch.ones(dim)
+        self.beta = torch.zeros(dim)
+        self.running_mean = torch.zeros(dim)
+        self.running_var = torch.ones(dim)
 
     def __call__(self, x):
         """
@@ -449,19 +470,30 @@ class BatchNorm1d:
           - 输出 self.out = gamma * xhat + beta，存起来并返回。
         x 的 shape 是 (N, dim)，均值和方差沿第 0 维（batch 维）计算。
         """
-        # TODO: 实现 BatchNorm1d.__call__
-        raise NotImplementedError("BatchNorm1d.__call__")
+        # 实现 BatchNorm1d.__call__
+        if self.training:
+            mean = x.mean(0, keepdim=True)
+            var = x.var(0, keepdim=True)
+            with torch.no_grad():
+                self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean
+                self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var
+        else:
+            mean = self.running_mean
+            var = self.running_var
+        self.out = self.gamma * (x - mean) / torch.sqrt(var + self.eps) + self.beta
+        return self.out
 
     def parameters(self):
-        # TODO: 实现 BatchNorm1d.parameters
-        raise NotImplementedError("BatchNorm1d.parameters")
+        # 实现 BatchNorm1d.parameters
+        return [self.gamma, self.beta]
 
 
 class Tanh:
 
     def __call__(self, x):
-        # TODO: 实现 Tanh.__call__
-        raise NotImplementedError("Tanh.__call__")
+        # 实现 Tanh.__call__
+        self.out = torch.tanh(x)
+        return self.out
 
     def parameters(self):
         return []
