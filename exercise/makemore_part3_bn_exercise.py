@@ -528,17 +528,19 @@ def build_deep_net(n_layers=5, n_hidden=100, use_bn=True, gain=5 / 3, seed=SEED,
     layers = []
     for i in range(n_layers):
         if i == 0:
-            layers += [Linear(n_emb * block_size, n_hidden, bias=not use_bn)] + (
+            layers += [Linear(n_emb * block_size, n_hidden, bias=not use_bn, generator=g)] + (
                 [BatchNorm1d(n_hidden)] if use_bn else []) + [
                           Tanh()]
         else:
-            layers += [Linear(n_hidden, n_hidden, bias=not use_bn)] + ([BatchNorm1d(n_hidden)] if use_bn else []) + [
-                Tanh()]
+            layers += [Linear(n_hidden, n_hidden, bias=not use_bn, generator=g)] + (
+                [BatchNorm1d(n_hidden)] if use_bn else []) + [
+                          Tanh()]
     with torch.no_grad():
         for layer in layers:
             if isinstance(layer, Linear):
                 layer.weight *= gain
-    layers += [Linear(n_hidden, VOCAB_SIZE, bias=not use_bn)] + ([BatchNorm1d(VOCAB_SIZE)] if use_bn else [])
+    layers += [Linear(n_hidden, VOCAB_SIZE, bias=not use_bn, generator=g)] + (
+        [BatchNorm1d(VOCAB_SIZE)] if use_bn else [])
     with torch.no_grad():
         if use_bn:
             last: BatchNorm1d = layers[-1]
@@ -671,7 +673,7 @@ def sample(C, layers, itos, num=20, block_size=BLOCK_SIZE, seed=SEED + 10):
         context = [0] * block_size
         name = []
         while True:
-            X = torch.tensor(context)
+            X = torch.tensor([context])
             logits = deep_forward(X, C, layers)
             probs = F.softmax(logits, dim=1)
             ix = torch.multinomial(probs, num_samples=1, replacement=True, generator=g).item()
@@ -682,6 +684,7 @@ def sample(C, layers, itos, num=20, block_size=BLOCK_SIZE, seed=SEED + 10):
                 break
             name.append(itos[ix])
     return name_list
+
 
 @torch.no_grad()
 def eval_loss(X, Y, forward_fn):
