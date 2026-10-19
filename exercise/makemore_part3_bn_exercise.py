@@ -40,7 +40,7 @@ tanh 隐藏层大量饱和，网络前几千步都在白白浪费。网络只有
 import math
 import os
 import random
-from math import sqrt
+from math import sqrt, log
 
 import torch
 import torch.nn.functional as F
@@ -610,6 +610,7 @@ def grad_stats(layers):
             stats.append(layer.out.grad.std())
     return stats
 
+
 def grad_data_ratio(p):
     """
     返回 p.grad.std() / p.data.std()（float）。
@@ -618,8 +619,8 @@ def grad_data_ratio(p):
     同样的学习率下它会被更新得过猛。课程里发现最后一层的这个比例特别大，
     这是因为我们刻意把最后一层初始化得很小（*0.1）。
     """
-    # TODO: 实现 grad_data_ratio
-    raise NotImplementedError("grad_data_ratio")
+    # 实现 grad_data_ratio
+    return p.grad.std().item() / p.data.std().item()
 
 
 def update_data_ratio(p, lr):
@@ -632,8 +633,8 @@ def update_data_ratio(p, lr):
       - 远大于 -3：学习率太大，参数每步都被剧烈改写，训练不稳定。
     课程里把每一步每个参数的这个值都记下来画成曲线，看它们是否收敛在 -3 附近。
     """
-    # TODO: 实现 update_data_ratio
-    raise NotImplementedError("update_data_ratio")
+    # 实现 update_data_ratio
+    return torch.log10((lr * p.grad).std() / p.data.std()).item()
 
 
 def diagnose(X, Y, C, layers, parameters):
@@ -663,9 +664,24 @@ def sample(C, layers, itos, num=20, block_size=BLOCK_SIZE, seed=SEED + 10):
        对 1 个样本算方差会得到 nan（unbiased var 要除以 N-1 = 0）。
        所以采样前必须 set_training(layers, False)。这一步由调用方负责。
     """
-    # TODO: 实现 sample
-    raise NotImplementedError("sample")
-
+    # 实现 sample
+    g = torch.Generator().manual_seed(seed)
+    name_list = []
+    for i in range(num):
+        context = [0] * block_size
+        name = []
+        while True:
+            X = torch.tensor(context)
+            logits = deep_forward(X, C, layers)
+            probs = F.softmax(logits, dim=1)
+            ix = torch.multinomial(probs, num_samples=1, replacement=True, generator=g).item()
+            context = context[1:]
+            context.append(ix)
+            if ix == 0:
+                name_list.append(''.join(name))
+                break
+            name.append(itos[ix])
+    return name_list
 
 @torch.no_grad()
 def eval_loss(X, Y, forward_fn):
