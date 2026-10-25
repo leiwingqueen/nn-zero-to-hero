@@ -432,7 +432,8 @@ class Linear:
         # 实现 Linear.__call__
         self.out = x @ self.weight
         if self.bias is not None:
-            self.out += self.bias
+            # 注意：这里不能写 self.out+=self.bias，因为这是原地更新，会影响autograd的梯度计算
+            self.out = self.out + self.bias
         return self.out
 
     def parameters(self):
