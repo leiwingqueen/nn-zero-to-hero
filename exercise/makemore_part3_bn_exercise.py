@@ -396,7 +396,7 @@ def train_loop(Xtr, Ytr, parameters, forward_fn, steps, batch_size=32, lr=0.1,
         cur_lr = lr if i < steps * lr_decay_at else lr * 0.1
         for p in parameters:
             p.data += -cur_lr * p.grad
-        if print_every and i % print_every == 0:
+        if (print_every and i % print_every == 0) or i == steps - 1:
             print(f"      {i:7d}/{steps:7d}: {loss.item():.4f}")
         lossi.append(loss.item())
     return lossi

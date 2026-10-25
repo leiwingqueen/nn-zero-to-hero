@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import torch
 
 from exercise.makemore_part3_bn_exercise import train_loop, load_words, build_vocab, split_words, \
     build_dataset, build_deep_net, deep_forward, set_training
@@ -19,14 +20,17 @@ def main():
     print(f"数据集: train {tuple(Xtr.shape)}  dev {tuple(Xdev.shape)}  test {tuple(Xte.shape)}")
 
     gains = [0.5, 1, 5 / 3, 3]
+    n_layer = 20
     for gain in gains:
-        C, layers, parameters = build_deep_net(use_bn=False, gain=gain)
-        steps = 3_000
-        print(f"      训练 5 层 BN 网络 {steps} 步（CPU 约 20 秒）...")
+        C, layers, parameters = build_deep_net(n_layers=n_layer, use_bn=False, gain=gain)
+        steps = 5_000
+        print(f"gain:{gain}, 训练 {n_layer} 层 BN 网络 {steps} 步（CPU 约 20 秒）...")
         set_training(layers, True)
         lossi = train_loop(Xtr, Ytr, parameters, lambda xb: deep_forward(xb, C, layers), steps)
-        plt.plot(lossi)
-        plt.show()
+        # plt.plot(lossi)
+        plt.plot(torch.tensor(lossi).view(-1, 100).mean(1), label=f"gain={gain:.2f}")
+    plt.legend()
+    plt.show()
 
 
 if __name__ == "__main__":
