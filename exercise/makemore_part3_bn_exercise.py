@@ -40,11 +40,10 @@ tanh 隐藏层大量饱和，网络前几千步都在白白浪费。网络只有
 import math
 import os
 import random
-from math import sqrt, log
+from math import sqrt
 
 import torch
 import torch.nn.functional as F
-from torch._C import dtype
 
 # 固定随机种子，保证结果可复现（课程里用的就是这个数）
 SEED = 2147483647
@@ -118,9 +117,7 @@ def expected_init_loss(vocab_size=VOCAB_SIZE):
     "非常自信地给出了错误答案" —— logits 的数值太大，softmax 被推向了极端。
     """
     # 实现 expected_init_loss
-    logits = torch.zeros(vocab_size)
-    loss = F.cross_entropy(logits, torch.zeros(1, dtype=torch.long))
-    return loss
+    return -math.log(1 / vocab_size)
 
 
 def init_mlp(scheme="kaiming", seed=SEED, n_emb=N_EMB, n_hidden=N_HIDDEN, block_size=BLOCK_SIZE):
@@ -170,6 +167,8 @@ def init_mlp(scheme="kaiming", seed=SEED, n_emb=N_EMB, n_hidden=N_HIDDEN, block_
             W1 *= kaiming_std(fan_in=n_emb * block_size, nonlinearity="tanh")
             b1 *= 0.01
             print("init mlp kaiming")
+        case _:
+            raise ValueError(scheme)
     parameters = [C, W1, b1, W2, b2]
     for param in parameters:
         param.requires_grad = True
@@ -344,8 +343,11 @@ def bn_mlp_forward(X, params, buffers, training=True, momentum=BN_MOMENTUM, eps=
         mean = hpreact.mean(0, keepdim=True)  # (1, n_hidden)，每个神经元在 batch 上的均值
         var = hpreact.var(0, keepdim=True)  # (1, n_hidden)
         with torch.no_grad():
-            buffers["mean"] = (1 - momentum) * buffers["mean"] + momentum * mean
-            buffers["var"] = (1 - momentum) * buffers["var"] + momentum * var
+            # 调整为原地更新
+            # buffers["mean"] = (1 - momentum) * buffers["mean"] + momentum * mean
+            # buffers["var"] = (1 - momentum) * buffers["var"] + momentum * var
+            buffers["mean"].mul_(1 - momentum).add_(momentum * mean)
+            buffers["var"].mul_(1 - momentum).add_(momentum * var)
     else:
         mean = buffers["mean"]
         var = buffers["var"]
@@ -472,8 +474,9 @@ class BatchNorm1d:
         """
         # 实现 BatchNorm1d.__call__
         if self.training:
-            mean = x.mean(0, keepdim=True)
-            var = x.var(0, keepdim=True)
+            # 这里不需要keepdim，不然shape会变成[1,dim]，课程的写法是有问题的
+            mean = x.mean(0)
+            var = x.var(0)
             with torch.no_grad():
                 self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean
                 self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var
@@ -527,14 +530,10 @@ def build_deep_net(n_layers=5, n_hidden=100, use_bn=True, gain=5 / 3, seed=SEED,
     C = torch.randn((VOCAB_SIZE, n_emb), generator=g)
     layers = []
     for i in range(n_layers):
-        if i == 0:
-            layers += [Linear(n_emb * block_size, n_hidden, bias=not use_bn, generator=g)] + (
-                [BatchNorm1d(n_hidden)] if use_bn else []) + [
-                          Tanh()]
-        else:
-            layers += [Linear(n_hidden, n_hidden, bias=not use_bn, generator=g)] + (
-                [BatchNorm1d(n_hidden)] if use_bn else []) + [
-                          Tanh()]
+        fan_in = n_emb * block_size if i == 0 else n_hidden
+        layers += [Linear(fan_in, n_hidden, bias=not use_bn, generator=g)] + (
+            [BatchNorm1d(n_hidden)] if use_bn else []) + [
+                      Tanh()]
     with torch.no_grad():
         for layer in layers:
             if isinstance(layer, Linear):
@@ -589,7 +588,7 @@ def activation_stats(layers, thresh=0.97):
     stats = []
     for layer in layers:
         if isinstance(layer, Tanh):
-            stats.append({"mean": layer.out.mean(), "std": layer.out.std(),
+            stats.append({"mean": layer.out.mean().item(), "std": layer.out.std().item(),
                           "saturated": tanh_saturation(layer.out, thresh)})
     return stats
 
@@ -609,7 +608,7 @@ def grad_stats(layers):
     stats = []
     for layer in layers:
         if isinstance(layer, Tanh):
-            stats.append(layer.out.grad.std())
+            stats.append(layer.out.grad.std().item())
     return stats
 
 
