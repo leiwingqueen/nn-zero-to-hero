@@ -504,7 +504,7 @@ class Tanh:
 
 
 def build_deep_net(n_layers=5, n_hidden=100, use_bn=True, gain=5 / 3, seed=SEED,
-                   n_emb=N_EMB, block_size=BLOCK_SIZE):
+                   n_emb=N_EMB, block_size=BLOCK_SIZE, use_tanh=True):
     """
     搭一个 n_layers 个隐藏层的深层 MLP，返回 (C, layers, parameters)。
 
@@ -533,8 +533,7 @@ def build_deep_net(n_layers=5, n_hidden=100, use_bn=True, gain=5 / 3, seed=SEED,
     for i in range(n_layers):
         fan_in = n_emb * block_size if i == 0 else n_hidden
         layers += [Linear(fan_in, n_hidden, bias=not use_bn, generator=g)] + (
-            [BatchNorm1d(n_hidden)] if use_bn else []) + [
-                      Tanh()]
+            [BatchNorm1d(n_hidden)] if use_bn else []) + ([Tanh()] if use_tanh else [])
     with torch.no_grad():
         for layer in layers:
             if isinstance(layer, Linear):

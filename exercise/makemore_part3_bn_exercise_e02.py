@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import torch
 
 from exercise.makemore_part3_bn_exercise import train_loop, load_words, build_vocab, split_words, \
-    build_dataset, build_deep_net, deep_forward, set_training
+    build_dataset, build_deep_net, deep_forward, set_training, SEED, N_EMB, BLOCK_SIZE, VOCAB_SIZE
 
 
 # E02: 把 build_deep_net 的 use_bn 设成 False，分别用 gain = 0.5 / 1 / 5/3 / 3 训练几千步，
@@ -21,16 +21,17 @@ def main():
 
     gains = [0.5, 1, 5 / 3, 3]
     n_layer = 20
-    for gain in gains:
-        C, layers, parameters = build_deep_net(n_layers=n_layer, use_bn=False, gain=gain)
-        steps = 5_000
-        print(f"gain:{gain}, 训练 {n_layer} 层 BN 网络 {steps} 步（CPU 约 20 秒）...")
-        set_training(layers, True)
-        lossi = train_loop(Xtr, Ytr, parameters, lambda xb: deep_forward(xb, C, layers), steps)
-        # plt.plot(lossi)
-        plt.plot(torch.tensor(lossi).view(-1, 100).mean(1), label=f"gain={gain:.2f}")
-    plt.legend()
-    plt.show()
+    for use_tanh in [True, False]:
+        for gain in gains:
+            C, layers, parameters = build_deep_net(n_layers=n_layer, use_bn=False, gain=gain, use_tanh=use_tanh)
+            steps = 5_000
+            print(f"gain:{gain}, 训练 {n_layer} 层 BN 网络 {steps} 步（CPU 约 20 秒）...")
+            set_training(layers, True)
+            lossi = train_loop(Xtr, Ytr, parameters, lambda xb: deep_forward(xb, C, layers), steps)
+            # plt.plot(lossi)
+            plt.plot(torch.tensor(lossi).view(-1, 100).mean(1), label=f"gain={gain:.2f},tanh={use_tanh}")
+        plt.legend()
+        plt.show()
 
 
 if __name__ == "__main__":
