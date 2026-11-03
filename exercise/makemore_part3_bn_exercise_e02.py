@@ -21,15 +21,15 @@ def main():
 
     gains = [0.5, 1, 5 / 3, 3]
     n_layer = 20
+    steps = 5_000
     for use_tanh in [True, False]:
         for gain in gains:
             C, layers, parameters = build_deep_net(n_layers=n_layer, use_bn=False, gain=gain, use_tanh=use_tanh)
-            steps = 5_000
             print(f"gain:{gain}, 训练 {n_layer} 层 BN 网络 {steps} 步（CPU 约 20 秒）...")
             set_training(layers, True)
             lossi = train_loop(Xtr, Ytr, parameters, lambda xb: deep_forward(xb, C, layers), steps)
             # plt.plot(lossi)
-            plt.plot(torch.tensor(lossi).view(-1, 100).mean(1), label=f"gain={gain:.2f},tanh={use_tanh}")
+            plt.plot(torch.tensor(lossi).log10().view(-1, 100).mean(1), label=f"gain={gain:.2f},tanh={use_tanh}")
         plt.legend()
         plt.show()
 

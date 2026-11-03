@@ -1,7 +1,7 @@
 import torch
 
 from exercise.makemore_part3_bn_exercise import init_mlp, train_loop, mlp_forward, load_words, build_vocab, split_words, \
-    build_dataset, eval_loss
+    build_dataset, eval_loss, init_bn_mlp, bn_mlp_forward
 import matplotlib.pyplot as plt
 
 
@@ -20,20 +20,28 @@ def main():
     Xte, Yte = build_dataset(te_words, stoi)
     print(f"数据集: train {tuple(Xtr.shape)}  dev {tuple(Xdev.shape)}  test {tuple(Xte.shape)}")
 
-    fwd = lambda x: mlp_forward(x, params)[0]
-
     # --- 7. E01 ---
+    steps = 200_000
+    runs = {}
     for scheme in ["naive", "fix_softmax", "fix_tanh", "kaiming"]:
         params = init_mlp(scheme)
-        steps = 200_000
+        fwd = lambda x, p=params: mlp_forward(x, p)[0]
         lossi = train_loop(Xtr, Ytr, params, lambda xb, p=params: mlp_forward(xb, p)[0], steps)
-        plt.plot(torch.tensor(lossi).view(-1, 100).mean(1), label=f"scheme={scheme}")
+        # plt.plot(torch.tensor(lossi).view(-1, 100).mean(1), label=f"scheme={scheme}")
         l_tr, l_dev = eval_loss(Xtr, Ytr, fwd), eval_loss(Xdev, Ydev, fwd)
+        runs[scheme] = (lossi, l_tr, l_dev)
         print(f"scheme:{scheme},train loss:{l_tr},dev loss:{l_dev}")
         # plt.plot(lossi)
+    params, buffers = init_bn_mlp()
+    lossi = train_loop(Xtr, Ytr, params, lambda xb: bn_mlp_forward(xb, params, buffers, True), steps)
+    fwd = lambda x: bn_mlp_forward(x, params, buffers, training=False)
+    runs["batchnorm"] = (lossi, eval_loss(Xtr, Ytr, fwd), eval_loss(Xdev, Ydev, fwd))
+
+    for name, (lossi, l_tr, l_dev) in runs.items():
+        print(f"{name:12s} train {l_tr:.4f}  dev {l_dev:.4f}")
+        plt.plot(torch.tensor(lossi).log10().view(-1, 1000).mean(1), label=name)
     plt.legend()
     plt.show()
-
 
 if __name__ == "__main__":
     main()
