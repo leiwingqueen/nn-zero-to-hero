@@ -61,8 +61,14 @@ def build_vocab(words):
 
     提示：先 set(''.join(words)) 拿到所有出现过的字符，sorted 之后 enumerate。
     """
-    # TODO: 实现字符表
-    raise NotImplementedError("build_vocab")
+    # 实现字符表
+    chars = sorted(set(''.join(words)))
+    stoi = {'.': 0}
+    itos = {0: '.'}
+    for i, char in enumerate(chars):
+        stoi[char] = i + 1
+        itos[i + 1] = char
+    return stoi, itos
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +87,15 @@ def count_bigrams(words, stoi):
 
     提示：N = torch.zeros((27, 27), dtype=torch.int32)
     """
-    # TODO: 实现 bigram 计数
-    raise NotImplementedError("count_bigrams")
+    # 实现 bigram 计数
+    N = torch.zeros((27, 27), dtype=torch.int32)
+    for word in words:
+        chs = ['.'] + list(word) + ['.']
+        for (c1, c2) in zip(chs, chs[1:]):
+            idx1 = stoi[c1]
+            idx2 = stoi[c2]
+            N[idx1, idx2] += 1
+    return N
 
 
 def normalize_counts(N, smoothing=1):
@@ -99,8 +112,10 @@ def normalize_counts(N, smoothing=1):
         P.sum(1)               -> (27,)  == (1, 27)，广播时按列对齐 ❌
       所以必须写 keepdim=True。
     """
-    # TODO: 实现归一化
-    raise NotImplementedError("normalize_counts")
+    # 实现归一化
+    P = (N + smoothing).float()
+    P = P / P.sum(1, keepdim=True)
+    return P
 
 
 def sample_from_P(P, itos, num=5, seed=SEED):
@@ -116,8 +131,19 @@ def sample_from_P(P, itos, num=5, seed=SEED):
           （torch 各版本 multinomial 的随机数实现有差异，采样出的具体名字不一定和
             课程视频里完全一致，不用纠结；只要看起来像"名字模样的乱码"就对了。）
     """
-    # TODO: 实现采样
-    raise NotImplementedError("sample_from_P")
+    # 实现采样
+    g = torch.Generator().manual_seed(seed)
+    name_list = []
+    for i in range(num):
+        ix = 0
+        name = []
+        while True:
+            ix = torch.multinomial(P[ix], num_samples=1, replacement=True, generator=g).item()
+            if ix == 0:
+                name_list.append(''.join(name))
+                break
+            name.append(itos[ix])
+    return name_list
 
 
 def nll_loss_from_P(words, P, stoi):
@@ -132,8 +158,17 @@ def nll_loss_from_P(words, P, stoi):
 
     返回一个 float。补全后在完整 names.txt 上应该约等于 2.4544。
     """
-    # TODO: 实现 loss 计算
-    raise NotImplementedError("nll_loss_from_P")
+    # 实现 loss 计算
+    n = 0
+    nll = 0
+    for word in words:
+        chs = ['.'] + list(word) + ['.']
+        for (c1, c2) in zip(chs, chs[1:]):
+            idx1 = stoi[c1]
+            idx2 = stoi[c2]
+            nll += -torch.log(P[idx1, idx2]).item()
+            n += 1
+    return nll / n
 
 
 # ---------------------------------------------------------------------------
@@ -148,8 +183,17 @@ def build_dataset(words, stoi):
 
     同样每个单词要前后补 '.'。完整数据集上应该有 228146 个样本。
     """
-    # TODO: 实现训练集构造
-    raise NotImplementedError("build_dataset")
+    # 实现训练集构造
+    xs = []
+    ys = []
+    for word in words:
+        chs = ['.'] + list(word) + ['.']
+        for (c1, c2) in zip(chs, chs[1:]):
+            idx1 = stoi[c1]
+            idx2 = stoi[c2]
+            xs.append(idx1)
+            ys.append(idx2)
+    return torch.tensor(xs), torch.tensor(ys)
 
 
 def forward(xs, W):
@@ -168,8 +212,12 @@ def forward(xs, W):
     小知识：one-hot 向量乘以矩阵 W，本质就是「取出 W 的第 ix 行」，
             所以这个网络和查表法在数学上是同一个东西。
     """
-    # TODO: 实现前向传播
-    raise NotImplementedError("forward")
+    # 实现前向传播
+    xenc = F.one_hot(xs, num_classes=27).float()
+    logits = xenc @ W
+    # 这两步就是softmax的操作
+    counts = logits.exp()
+    return counts / counts.sum(1, keepdim=True)
 
 
 def train(xs, ys, steps=100, lr=50.0, reg=0.01, seed=SEED, verbose=True):
@@ -191,8 +239,19 @@ def train(xs, ys, steps=100, lr=50.0, reg=0.01, seed=SEED, verbose=True):
 
     学习率 50、跑 100 步左右，loss 会收敛到 2.47 附近（略高于统计法，因为还没完全收敛）。
     """
-    # TODO: 实现训练循环
-    raise NotImplementedError("train")
+    # 实现训练循环
+    g = torch.Generator().manual_seed(2147483647)
+    num = len(xs)
+    W = torch.randn((27, 27), generator=g, requires_grad=True)
+    for i in range(steps):
+        probs = forward(xs, W)
+        nll = -probs[torch.arange(num), ys].log().mean()
+        loss = nll + reg * (W ** 2).mean()
+        W.grad = None
+        loss.backward()
+        # update
+        W.data += -lr * W.grad
+    return W
 
 
 def sample_from_W(W, itos, num=5, seed=SEED):
@@ -207,9 +266,25 @@ def sample_from_W(W, itos, num=5, seed=SEED):
     如果实现正确，输出应该和 sample_from_P 几乎一模一样 —— 这正是本节课的重点结论：
     两种方法学到的是同一个模型。
     """
-    # TODO: 实现基于 W 的采样
-    raise NotImplementedError("sample_from_W")
-
+    # 实现基于 W 的采样
+    # 提前把所有的概率P算出来
+    xenc = F.one_hot(torch.arange(27), num_classes=27).float()
+    logits = xenc @ W
+    # 这两步就是softmax的操作
+    counts = logits.exp()
+    P = counts / counts.sum(1, keepdim=True)
+    g = torch.Generator().manual_seed(seed)
+    name_list = []
+    for i in range(num):
+        ix = 0
+        name = []
+        while True:
+            ix = torch.multinomial(P[ix], num_samples=1, replacement=True, generator=g).item()
+            if ix == 0:
+                name_list.append(''.join(name))
+                break
+            name.append(itos[ix])
+    return name_list
 
 # ---------------------------------------------------------------------------
 # 主流程：逐节自检

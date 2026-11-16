@@ -45,6 +45,7 @@ import random
 
 import torch
 import torch.nn.functional as F
+from matplotlib import pyplot as plt
 
 # 固定随机种子，保证结果可复现（课程里用的就是这个数）
 SEED = 2147483647
@@ -110,8 +111,18 @@ def build_dataset(words, stoi, block_size=BLOCK_SIZE):
 
     注意最后一条：上下文 'mma' 要预测结束符 '.'，这是模型学会"何时停下"的关键。
     """
-    # TODO: 实现数据集构造
-    raise NotImplementedError("build_dataset")
+    # 实现数据集构造
+    X = []
+    Y = []
+    for word in words:
+        context = [0] * block_size
+        for ch in word + '.':
+            ix = stoi[ch]
+            X.append(context)
+            Y.append(ix)
+            context = context[1:]
+            context.append(ix)
+    return torch.tensor(X), torch.tensor(Y)
 
 
 def split_words(words, seed=42):
@@ -157,8 +168,17 @@ def init_params(seed=SEED, block_size=BLOCK_SIZE, n_emb=N_EMB, n_hidden=N_HIDDEN
 
     默认配置下总参数量应为 11897 个（是不是比 27^3 的表格小多了？）。
     """
-    # TODO: 实现参数初始化
-    raise NotImplementedError("init_params")
+    # 实现参数初始化
+    g = torch.Generator().manual_seed(seed)
+    C = torch.randn(VOCAB_SIZE, n_emb, generator=g)
+    W1 = torch.randn(block_size * n_emb, n_hidden, generator=g)
+    b1 = torch.randn(n_hidden, generator=g)
+    W2 = torch.randn(n_hidden, VOCAB_SIZE, generator=g)
+    b2 = torch.randn(VOCAB_SIZE, generator=g)
+    parameters = [C, W1, b1, W2, b2]
+    for param in parameters:
+        param.requires_grad = True
+    return parameters
 
 
 # ---------------------------------------------------------------------------
@@ -186,8 +206,35 @@ def forward(X, params):
       3) logits = h @ W2 + b2
          注意这里返回的是 logits（未归一化的分数），不是概率。
     """
-    # TODO: 实现前向传播
-    raise NotImplementedError("forward")
+
+    """
+    网络结构（block_size=3, n_emb=10, n_hidden=200）：
+
+    输入 3 个字符下标  (N, 3)
+        │  C[X]                       查表：每个字符 -> 10 维向量
+        ▼
+    embedding          (N, 3, 10)
+        │  .view(N, 30)               把 3 个向量拼成一条 30 维
+        ▼
+    (N, 30) @ W1 + b1  -> tanh        隐藏层，200 个神经元
+        ▼
+    (N, 200) @ W2 + b2 -> logits      输出层，27 个类别
+        ▼
+    cross_entropy(logits, Y)          loss
+    """
+    # 实现前向传播
+    N = X.shape[0]
+    C = params[0]
+    W1 = params[1]
+    b1 = params[2]
+    W2 = params[3]
+    b2 = params[4]
+    # (N,block_size,n_emb)
+    emb = C[X]
+    # (N,n_hidden)
+    hidden = torch.tanh(emb.view(N, -1) @ W1 + b1)
+    logits = hidden @ W2 + b2
+    return logits
 
 
 # ---------------------------------------------------------------------------
@@ -223,8 +270,27 @@ def train(Xtr, Ytr, params, steps=100000, batch_size=32, lr=0.1, lr_decay_at=0.6
     ⚠️ minibatch loss 抖动很大是正常的（每次只看 32 条样本），
        判断模型好坏要用下面 split_loss 在完整 train/dev 上算的 loss。
     """
-    # TODO: 实现训练循环
-    raise NotImplementedError("train")
+    # 实现训练循环
+    g = torch.Generator().manual_seed(seed)
+    N = Xtr.shape[0]
+    losses = []
+    decay = lr_decay_at * steps
+    for i in range(steps):
+        # ix是(batch_size,)
+        ix = torch.randint(0, N, (batch_size,), generator=g)
+        # Xtr[ix]的维度是 (batch_size,block_size)
+        logit = forward(Xtr[ix], params)
+        loss = F.cross_entropy(logit, Ytr[ix])
+        # backward
+        for p in params:
+            p.grad = None
+        loss.backward()
+        losses.append(loss.item())
+        # update
+        lr_i = lr if i < decay else lr * decay_factor
+        for p in params:
+            p.data += -lr_i * p.grad
+    return losses
 
 
 @torch.no_grad()
@@ -237,8 +303,10 @@ def split_loss(X, Y, params):
         省显存也更快（评估阶段不需要反向传播）；
       - 返回 .item() 而不是张量。
     """
-    # TODO: 实现 split 上的 loss 评估
-    raise NotImplementedError("split_loss")
+    # 实现 split 上的 loss 评估
+    logit = forward(X, params)
+    loss = F.cross_entropy(logit, Y)
+    return loss.item()
 
 
 # ---------------------------------------------------------------------------
@@ -259,8 +327,27 @@ def find_lr(Xtr, Ytr, steps=1000, lr_min=-3, lr_max=0, seed=SEED):
     然后把 (lrs, losses) 画出来：一开始 loss 缓慢下降，某处开始剧烈震荡甚至上升，
     "震荡开始前的那个 lr" 就是比较合适的取值。这就是课程里得到 lr≈0.1 的方法。
     """
-    # TODO: 实现学习率扫描
-    raise NotImplementedError("find_lr")
+    # 实现学习率扫描
+    batch_size = 32
+    g = torch.Generator().manual_seed(seed)
+    lre = torch.linspace(lr_min, lr_max, steps)
+    lrs = (10 ** lre).tolist()
+    losses = []
+    params = init_params(seed=seed)
+    for i in range(steps):
+        ix = torch.randint(0, Xtr.shape[0], (batch_size,), generator=g)
+        logit = forward(Xtr[ix], params)
+        loss = F.cross_entropy(logit, Ytr[ix])
+        # backward
+        for p in params:
+            p.grad = None
+        loss.backward()
+        losses.append(loss.item())
+        lr = lrs[i]
+        # update
+        for p in params:
+            p.data += -lr * p.grad
+    return lrs, losses
 
 
 # ---------------------------------------------------------------------------
@@ -282,8 +369,24 @@ def sample(params, itos, num=20, block_size=BLOCK_SIZE, seed=SEED + 10):
 
     这个模型采样出来的名字（carmah、amelle、khi …）明显比 part1 的 bigram 更像名字了。
     """
-    # TODO: 实现采样
-    raise NotImplementedError("sample")
+    # 实现采样
+    g = torch.Generator().manual_seed(seed)
+    name_list = []
+    for i in range(num):
+        context = [0] * block_size
+        name = []
+        while True:
+            X = torch.tensor([context])
+            logits = forward(X, params)
+            probs = F.softmax(logits, dim=1)
+            ix = torch.multinomial(probs, num_samples=1, replacement=True, generator=g).item()
+            context = context[1:]
+            context.append(ix)
+            if ix == 0:
+                name_list.append(''.join(name))
+                break
+            name.append(itos[ix])
+    return name_list
 
 
 # ---------------------------------------------------------------------------

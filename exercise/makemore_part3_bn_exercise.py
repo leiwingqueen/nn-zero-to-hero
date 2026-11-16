@@ -40,6 +40,7 @@ tanh 隐藏层大量饱和，网络前几千步都在白白浪费。网络只有
 import math
 import os
 import random
+from math import sqrt
 
 import torch
 import torch.nn.functional as F
@@ -115,8 +116,8 @@ def expected_init_loss(vocab_size=VOCAB_SIZE):
     如果你的网络初始 loss 是 27（part2 就是这样），说明它在一开始就
     "非常自信地给出了错误答案" —— logits 的数值太大，softmax 被推向了极端。
     """
-    # TODO: 实现 expected_init_loss
-    raise NotImplementedError("expected_init_loss")
+    # 实现 expected_init_loss
+    return -math.log(1 / vocab_size)
 
 
 def init_mlp(scheme="kaiming", seed=SEED, n_emb=N_EMB, n_hidden=N_HIDDEN, block_size=BLOCK_SIZE):
@@ -140,8 +141,38 @@ def init_mlp(scheme="kaiming", seed=SEED, n_emb=N_EMB, n_hidden=N_HIDDEN, block_
     提示：缩放要在设置 requires_grad 之前做，或者放在 torch.no_grad() 里做，
           否则缩放后的张量不再是叶子节点，.grad 会是 None。
     """
-    # TODO: 实现 init_mlp
-    raise NotImplementedError("init_mlp")
+    # 实现 init_mlp
+    g = torch.Generator().manual_seed(seed)
+    C = torch.randn(VOCAB_SIZE, n_emb, generator=g)
+    W1 = torch.randn(block_size * n_emb, n_hidden, generator=g)
+    b1 = torch.randn(n_hidden, generator=g)
+    W2 = torch.randn(n_hidden, VOCAB_SIZE, generator=g)
+    b2 = torch.randn(VOCAB_SIZE, generator=g)
+    match scheme:
+        case "naive":
+            print("init mlp naive")
+        case "fix_softmax":
+            W2 *= 0.01
+            b2 *= 0
+            print("init mlp fix_softmax")
+        case "fix_tanh":
+            W2 *= 0.01
+            b2 *= 0
+            W1 *= 0.2
+            b1 *= 0.01
+            print("init mlp fix_tanh")
+        case "kaiming":
+            W2 *= 0.01
+            b2 *= 0
+            W1 *= kaiming_std(fan_in=n_emb * block_size, nonlinearity="tanh")
+            b1 *= 0.01
+            print("init mlp kaiming")
+        case _:
+            raise ValueError(scheme)
+    parameters = [C, W1, b1, W2, b2]
+    for param in parameters:
+        param.requires_grad = True
+    return parameters
 
 
 def mlp_forward(X, params):
@@ -175,8 +206,17 @@ def tanh_saturation(h, thresh=0.97):
     plt.imshow(h.abs() > 0.99, cmap='gray') 来直观感受，
     naive 初始化下直方图几乎全堆在 -1 和 +1 两端。
     """
-    # TODO: 实现 tanh_saturation
-    raise NotImplementedError("tanh_saturation")
+    # 实现 tanh_saturation
+    """
+    l = h.view(-1).abs().tolist()
+    cnt = 0
+    for _, num in enumerate(l):
+        if num > thresh:
+            cnt += 1
+    return cnt / len(l)
+    """
+    # 还有一个更骚的写法
+    return (h.abs() > thresh).float().mean().item()
 
 
 def dead_neurons(h, thresh=0.99):
@@ -189,8 +229,8 @@ def dead_neurons(h, thresh=0.99):
 
     提示：(...).all(dim=0) 可以沿 batch 维做"全部为真"的判断。
     """
-    # TODO: 实现 dead_neurons
-    raise NotImplementedError("dead_neurons")
+    # 实现 dead_neurons
+    return (h.abs() > thresh).all(dim=0).int().sum().item()
 
 
 def kaiming_std(fan_in, nonlinearity="tanh"):
@@ -209,8 +249,18 @@ def kaiming_std(fan_in, nonlinearity="tanh"):
     这些数字和 torch.nn.init.calculate_gain 一致。
     未知的 nonlinearity 请 raise ValueError。
     """
-    # TODO: 实现 kaiming_std
-    raise NotImplementedError("kaiming_std")
+    # 实现 kaiming_std
+    gain = 1
+    match nonlinearity:
+        case "linear":
+            gain = 1
+        case "tanh":
+            gain = 5 / 3
+        case "relu":
+            gain = sqrt(2)
+        case _:
+            raise ValueError
+    return gain / sqrt(fan_in)
 
 
 # ---------------------------------------------------------------------------
@@ -276,8 +326,35 @@ def bn_mlp_forward(X, params, buffers, training=True, momentum=BN_MOMENTUM, eps=
     ⚠️ 为什么 buffer 的更新要放在 no_grad 里？它不是参数，不该进计算图。
     ⚠️ 为什么要加 eps？如果某个神经元在 batch 内恰好输出全一样，var=0，会除以 0。
     """
-    # TODO: 实现 bn_mlp_forward
-    raise NotImplementedError("bn_mlp_forward")
+    # 实现 bn_mlp_forward
+    N = X.shape[0]
+    C = params[0]
+    W1 = params[1]
+    W2 = params[2]
+    b2 = params[3]
+    bngain = params[4]
+    bnbias = params[5]
+    # (N,block_size,n_emb)
+    emb = C[X]
+    # (N,n_hidden)
+    hpreact = emb.view(N, -1) @ W1
+    # BatchNorm
+    if training:
+        mean = hpreact.mean(0, keepdim=True)  # (1, n_hidden)，每个神经元在 batch 上的均值
+        var = hpreact.var(0, keepdim=True)  # (1, n_hidden)
+        with torch.no_grad():
+            # 调整为原地更新
+            # buffers["mean"] = (1 - momentum) * buffers["mean"] + momentum * mean
+            # buffers["var"] = (1 - momentum) * buffers["var"] + momentum * var
+            buffers["mean"].mul_(1 - momentum).add_(momentum * mean)
+            buffers["var"].mul_(1 - momentum).add_(momentum * var)
+    else:
+        mean = buffers["mean"]
+        var = buffers["var"]
+    hpreact = bngain * (hpreact - mean) / torch.sqrt(var + eps) + bnbias
+    h = torch.tanh(hpreact)
+    logits = h @ W2 + b2
+    return logits
 
 
 @torch.no_grad()
@@ -290,8 +367,16 @@ def calibrate_bn(Xtr, params):
     滑动平均（buffers）就是为了省掉这一步 —— 训练过程中顺手估出来。
     主流程会验证两者非常接近。
     """
-    # TODO: 实现 calibrate_bn
-    raise NotImplementedError("calibrate_bn")
+    # 实现 calibrate_bn
+    N = Xtr.shape[0]
+    C = params[0]
+    W1 = params[1]
+    emb = C[Xtr]
+    # (N,n_hidden)
+    hpreact = emb.view(N, -1) @ W1
+    mean = hpreact.mean(0, keepdim=True)
+    var = hpreact.var(0, keepdim=True)
+    return {"mean": mean, "var": var}
 
 
 def train_loop(Xtr, Ytr, parameters, forward_fn, steps, batch_size=32, lr=0.1,
@@ -311,7 +396,7 @@ def train_loop(Xtr, Ytr, parameters, forward_fn, steps, batch_size=32, lr=0.1,
         cur_lr = lr if i < steps * lr_decay_at else lr * 0.1
         for p in parameters:
             p.data += -cur_lr * p.grad
-        if print_every and i % print_every == 0:
+        if (print_every and i % print_every == 0) or i == steps - 1:
             print(f"      {i:7d}/{steps:7d}: {loss.item():.4f}")
         lossi.append(loss.item())
     return lossi
@@ -335,17 +420,25 @@ class Linear:
                 （即 gain=1 的 Kaiming；需要别的 gain 时由外部再乘）
         bias:   (fan_out,)，初始化为 0；bias=False 时为 None
         """
-        # TODO: 实现 Linear.__init__
-        raise NotImplementedError("Linear.__init__")
+        # 实现 Linear.__init__
+        self.weight = torch.randn((fan_in, fan_out), generator=generator) / sqrt(fan_in)
+        if bias:
+            self.bias = torch.zeros(fan_out)
+        else:
+            self.bias = None
 
     def __call__(self, x):
         """out = x @ weight (+ bias)，存进 self.out 并返回。"""
-        # TODO: 实现 Linear.__call__
-        raise NotImplementedError("Linear.__call__")
+        # 实现 Linear.__call__
+        self.out = x @ self.weight
+        if self.bias is not None:
+            # 注意：这里不能写 self.out+=self.bias，因为这是原地更新，会影响autograd的梯度计算
+            self.out = self.out + self.bias
+        return self.out
 
     def parameters(self):
-        # TODO: 实现 Linear.parameters
-        raise NotImplementedError("Linear.parameters")
+        # 实现 Linear.parameters
+        return [self.weight] + ([] if self.bias is None else [self.bias])
 
 
 class BatchNorm1d:
@@ -363,8 +456,14 @@ class BatchNorm1d:
         momentum=0.1 是 PyTorch 的默认值。手写版用 0.001 是因为 batch 太小统计量太抖；
         batch 大一些时 0.1 就够了。
         """
-        # TODO: 实现 BatchNorm1d.__init__
-        raise NotImplementedError("BatchNorm1d.__init__")
+        # 实现 BatchNorm1d.__init__
+        self.eps = eps
+        self.training = True
+        self.momentum = momentum
+        self.gamma = torch.ones(dim)
+        self.beta = torch.zeros(dim)
+        self.running_mean = torch.zeros(dim)
+        self.running_var = torch.ones(dim)
 
     def __call__(self, x):
         """
@@ -374,26 +473,38 @@ class BatchNorm1d:
           - 输出 self.out = gamma * xhat + beta，存起来并返回。
         x 的 shape 是 (N, dim)，均值和方差沿第 0 维（batch 维）计算。
         """
-        # TODO: 实现 BatchNorm1d.__call__
-        raise NotImplementedError("BatchNorm1d.__call__")
+        # 实现 BatchNorm1d.__call__
+        if self.training:
+            # 这里不需要keepdim，不然shape会变成[1,dim]，课程的写法是有问题的
+            mean = x.mean(0)
+            var = x.var(0)
+            with torch.no_grad():
+                self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean
+                self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var
+        else:
+            mean = self.running_mean
+            var = self.running_var
+        self.out = self.gamma * (x - mean) / torch.sqrt(var + self.eps) + self.beta
+        return self.out
 
     def parameters(self):
-        # TODO: 实现 BatchNorm1d.parameters
-        raise NotImplementedError("BatchNorm1d.parameters")
+        # 实现 BatchNorm1d.parameters
+        return [self.gamma, self.beta]
 
 
 class Tanh:
 
     def __call__(self, x):
-        # TODO: 实现 Tanh.__call__
-        raise NotImplementedError("Tanh.__call__")
+        # 实现 Tanh.__call__
+        self.out = torch.tanh(x)
+        return self.out
 
     def parameters(self):
         return []
 
 
 def build_deep_net(n_layers=5, n_hidden=100, use_bn=True, gain=5 / 3, seed=SEED,
-                   n_emb=N_EMB, block_size=BLOCK_SIZE):
+                   n_emb=N_EMB, block_size=BLOCK_SIZE, use_tanh=True):
     """
     搭一个 n_layers 个隐藏层的深层 MLP，返回 (C, layers, parameters)。
 
@@ -415,8 +526,33 @@ def build_deep_net(n_layers=5, n_hidden=100, use_bn=True, gain=5 / 3, seed=SEED,
 
     ⚠️ Linear 后面紧跟 BatchNorm 时为什么 bias=False？见 init_bn_mlp 的说明。
     """
-    # TODO: 实现 build_deep_net
-    raise NotImplementedError("build_deep_net")
+    # 实现 build_deep_net
+    g = torch.Generator().manual_seed(seed)
+    C = torch.randn((VOCAB_SIZE, n_emb), generator=g)
+    layers = []
+    for i in range(n_layers):
+        fan_in = n_emb * block_size if i == 0 else n_hidden
+        layers += [Linear(fan_in, n_hidden, bias=not use_bn, generator=g)] + (
+            [BatchNorm1d(n_hidden)] if use_bn else []) + ([Tanh()] if use_tanh else [])
+    with torch.no_grad():
+        for layer in layers:
+            if isinstance(layer, Linear):
+                layer.weight *= gain
+    layers += [Linear(n_hidden, VOCAB_SIZE, bias=not use_bn, generator=g)] + (
+        [BatchNorm1d(VOCAB_SIZE)] if use_bn else [])
+    with torch.no_grad():
+        if use_bn:
+            last: BatchNorm1d = layers[-1]
+            last.gamma *= 0.1
+        else:
+            last: Linear = layers[-1]
+            last.weight *= 0.1
+    params = [C]
+    for layer in layers:
+        params += layer.parameters()
+    for param in params:
+        param.requires_grad = True
+    return C, layers, params
 
 
 def deep_forward(X, C, layers):
@@ -448,8 +584,13 @@ def activation_stats(layers, thresh=0.97):
     健康的网络：各层 std 大致相同（不逐层缩小，也不逐层放大），饱和率在 5% 左右。
     课程里还会用 torch.histogram 把每层分布画成曲线叠在一起看。
     """
-    # TODO: 实现 activation_stats
-    raise NotImplementedError("activation_stats")
+    # 实现 activation_stats
+    stats = []
+    for layer in layers:
+        if isinstance(layer, Tanh):
+            stats.append({"mean": layer.out.mean().item(), "std": layer.out.std().item(),
+                          "saturated": tanh_saturation(layer.out, thresh)})
+    return stats
 
 
 def grad_stats(layers):
@@ -463,8 +604,12 @@ def grad_stats(layers):
     健康的网络：各层梯度的 std 也大致相同。
     如果从后往前逐层变小 -> 梯度消失；逐层变大 -> 梯度爆炸。
     """
-    # TODO: 实现 grad_stats
-    raise NotImplementedError("grad_stats")
+    # 实现 grad_stats
+    stats = []
+    for layer in layers:
+        if isinstance(layer, Tanh):
+            stats.append(layer.out.grad.std().item())
+    return stats
 
 
 def grad_data_ratio(p):
@@ -475,8 +620,8 @@ def grad_data_ratio(p):
     同样的学习率下它会被更新得过猛。课程里发现最后一层的这个比例特别大，
     这是因为我们刻意把最后一层初始化得很小（*0.1）。
     """
-    # TODO: 实现 grad_data_ratio
-    raise NotImplementedError("grad_data_ratio")
+    # 实现 grad_data_ratio
+    return p.grad.std().item() / p.data.std().item()
 
 
 def update_data_ratio(p, lr):
@@ -489,8 +634,8 @@ def update_data_ratio(p, lr):
       - 远大于 -3：学习率太大，参数每步都被剧烈改写，训练不稳定。
     课程里把每一步每个参数的这个值都记下来画成曲线，看它们是否收敛在 -3 附近。
     """
-    # TODO: 实现 update_data_ratio
-    raise NotImplementedError("update_data_ratio")
+    # 实现 update_data_ratio
+    return torch.log10((lr * p.grad).std() / p.data.std()).item()
 
 
 def diagnose(X, Y, C, layers, parameters):
@@ -520,8 +665,24 @@ def sample(C, layers, itos, num=20, block_size=BLOCK_SIZE, seed=SEED + 10):
        对 1 个样本算方差会得到 nan（unbiased var 要除以 N-1 = 0）。
        所以采样前必须 set_training(layers, False)。这一步由调用方负责。
     """
-    # TODO: 实现 sample
-    raise NotImplementedError("sample")
+    # 实现 sample
+    g = torch.Generator().manual_seed(seed)
+    name_list = []
+    for i in range(num):
+        context = [0] * block_size
+        name = []
+        while True:
+            X = torch.tensor([context])
+            logits = deep_forward(X, C, layers)
+            probs = F.softmax(logits, dim=1)
+            ix = torch.multinomial(probs, num_samples=1, replacement=True, generator=g).item()
+            context = context[1:]
+            context.append(ix)
+            if ix == 0:
+                name_list.append(''.join(name))
+                break
+            name.append(itos[ix])
+    return name_list
 
 
 @torch.no_grad()
@@ -545,6 +706,7 @@ def main():
     # --- 1. 初始 loss ---
     exp_loss = expected_init_loss()
     assert abs(exp_loss - 3.2958) < 1e-3, f"期望初始 loss ≈ 3.2958，实际 {exp_loss}"
+    print(f"期望初始loss={exp_loss}")
     Xb, Yb = Xtr[:1000], Ytr[:1000]
     init_losses = {}
     for scheme in ["naive", "fix_softmax", "fix_tanh", "kaiming"]:
@@ -755,4 +917,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
