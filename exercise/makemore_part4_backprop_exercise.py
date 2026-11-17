@@ -159,19 +159,34 @@ def make_gradient_demo(Xtr, Ytr, vocab_size=VOCAB_SIZE, seed=SEED):
 def exercise_manual_backward(c):
     """Exercise 1：逐个中间节点反向传播，完成 TODO 后对照 autograd。"""
     # 交叉熵索引与均值
+    # print(f'logprobs.shape:{c["logprobs"].shape}')
+    # 这里可以简单理解，L=(a+b+c)/n 的公式下，可以替换为 L=a/n+b/n+c/n，这里对a,b,c求导都是1/n
+    # 然后因为dlogprobs里面只有命中Yb的下标的中间变量才会影响L的结果，所以要去 dlogprobs[range(c["n"]), c["Yb"]]
     dlogprobs = torch.zeros_like(c["logprobs"])
     dlogprobs[range(c["n"]), c["Yb"]] = -1.0 / c["n"]
 
     # TODO：按计算图反向经过 log、乘法、sum、exp、减最大值等操作。
-    dprobs = ...
-    dcounts_sum_inv = ...
-    dcounts = ...
-    dcounts_sum = ...
-    dcounts = ...
-    dnorm_logits = ...
-    dlogits = ...
-    dlogit_maxes = ...
-    dlogits = ...
+    dprobs = dlogprobs / c["probs"]
+    # print(
+    #    f'probs.shape:f{c["probs"].shape},counts.shape:{c["counts"].shape},counts_sum_inv.shape:{c["counts_sum_inv"].shape}')
+    # 这里可以理解 counts_sum_inv 其实是做了扩展的，size[32,1]直接扩展成[32,27]
+    dcounts_sum_inv = (dprobs * c["counts"]).sum(1, keepdim=True)
+    # dcounts=dprobs * torch.ones_like(c["counts"]) * c["counts_sum_inv"]
+    # 因为dprobs和c["counts"]的shape是相同的，因此 torch.ones_like(c["counts"])这个可以省略掉
+    dcounts = dprobs * c["counts_sum_inv"]
+    # counts_sum_inv = counts_sum ** -1
+    dcounts_sum = dcounts_sum_inv * (-c["counts_sum"] ** -2)
+    # counts_sum = counts.sum(1, keepdim=True)
+    # counts_sum的shape是 [32,1],counts的shape是[32,27]
+    # 可以简单理解c=a+b+c，c对a/b/c求导都是1，我们唯一要做的是需要生成一个[32,27]全部为1的tensor
+    dcounts += dcounts_sum * torch.ones_like(c["counts"])
+    # counts = norm_logits.exp()
+    dnorm_logits = dcounts * c["counts"]
+    # norm_logits = logits - logit_maxes
+    dlogits = dnorm_logits
+    dlogit_maxes = -dnorm_logits
+    # logit_maxes = logits.max(1, keepdim=True).values
+    dlogits += dlogit_maxes * F.one_hot(c["logits"].max(1).indices, num_classes=c["logits"].shape[1])
 
     dh = ...
     dW2 = ...
@@ -348,8 +363,8 @@ def main():
     print(f"数据集：train={len(Xtr)}, dev={len(Xdev)}, test={len(Xte)}, vocab={len(stoi)}")
 
     # 小批次梯度核对（补全 Exercise 1 后取消注释）
-    # demo = make_gradient_demo(Xtr, Ytr, vocab_size=len(stoi))
-    # exercise_manual_backward(demo)
+    demo = make_gradient_demo(Xtr, Ytr, vocab_size=len(stoi))
+    exercise_manual_backward(demo)
 
     # 两个简化公式与 autograd 的核对
     logits = torch.randn(8, len(stoi), requires_grad=True)
