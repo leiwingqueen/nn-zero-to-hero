@@ -183,23 +183,36 @@ def exercise_manual_backward(c):
     # counts = norm_logits.exp()
     dnorm_logits = dcounts * c["counts"]
     # norm_logits = logits - logit_maxes
-    dlogits = dnorm_logits
-    dlogit_maxes = -dnorm_logits
+    # 注意，这里必须用clone，不然会被后面的计算影响
+    dlogits = dnorm_logits.clone()
+    # print(f'logits:{c['logits'].shape},logit_maxes:{c['logit_maxes'].shape}')
+    dlogit_maxes = -dnorm_logits.sum(1, keepdim=True)
     # logit_maxes = logits.max(1, keepdim=True).values
     dlogits += dlogit_maxes * F.one_hot(c["logits"].max(1).indices, num_classes=c["logits"].shape[1])
-
-    dh = ...
-    dW2 = ...
-    db2 = ...
-    dhpreact = ...
-    dbngain = ...
-    dbnraw = ...
-    dbnbias = ...
-    dbndiff = ...
-    dbnvar_inv = ...
-    dbnvar = ...
-    dbndiff2 = ...
-    dbndiff = ...
+    # print(f'logits:{c['logits'].shape},h:{c['h'].shape},W2:{c['W2'].shape},b2:{c['b2'].shape}')
+    # logits = h @ W2 + b2，这里需要手写一遍加深记忆
+    dh = dlogits @ c["W2"].T
+    dW2 = c["h"].T @ dlogits
+    db2 = dlogits.sum(0)
+    # h = torch.tanh(hpreact)
+    dhpreact = dh * (1 - c['h'] ** 2)
+    # hpreact = bngain * bnraw + bnbias
+    # print(
+    #    f'hpreact:{c['hpreact'].shape},bngain:{c['bngain'].shape},bnraw:{c['bnraw'].shape},bnbias:{c['bnbias'].shape}')
+    dbngain = (dhpreact * c["bnraw"]).sum(0, keepdim=True)
+    dbnraw = dhpreact * c["bngain"]
+    dbnbias = dhpreact.sum(0, keepdim=True)
+    # bnraw = bndiff * bnvar_inv
+    # print(f'bnraw:{c['bnraw'].shape},bndiff:{c['bndiff'].shape},bnvar_inv:{c['bnvar_inv'].shape}')
+    dbndiff = dbnraw * c["bnvar_inv"]
+    dbnvar_inv = (dbnraw * c["bndiff"]).sum(0, keepdim=True)
+    # bnvar_inv = (bnvar + BN_EPS) ** -0.5
+    dbnvar = dbnvar_inv * (-0.5 * (c["bnvar"] + BN_EPS) ** -1.5)
+    # bnvar = bndiff2.sum(0, keepdim=True) / (n - 1)  # unbiased sample variance
+    # print(f'bnvar:{c["bnvar"].shape},bndiff2:{c["bndiff2"].shape}')
+    dbndiff2 = dbnvar * torch.ones_like(c["bndiff2"]) / (c["n"] - 1)
+    # bndiff2 = bndiff ** 2
+    dbndiff = dbndiff2 * (2 * c["bndiff"])
     dhprebn = ...
     dbnmeani = ...
     dhprebn = ...
