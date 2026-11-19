@@ -165,7 +165,7 @@ def exercise_manual_backward(c):
     dlogprobs = torch.zeros_like(c["logprobs"])
     dlogprobs[range(c["n"]), c["Yb"]] = -1.0 / c["n"]
 
-    # TODO：按计算图反向经过 log、乘法、sum、exp、减最大值等操作。
+    # 按计算图反向经过 log、乘法、sum、exp、减最大值等操作。
     dprobs = dlogprobs / c["probs"]
     # print(
     #    f'probs.shape:f{c["probs"].shape},counts.shape:{c["counts"].shape},counts_sum_inv.shape:{c["counts_sum_inv"].shape}')
@@ -212,15 +212,23 @@ def exercise_manual_backward(c):
     # print(f'bnvar:{c["bnvar"].shape},bndiff2:{c["bndiff2"].shape}')
     dbndiff2 = dbnvar * torch.ones_like(c["bndiff2"]) / (c["n"] - 1)
     # bndiff2 = bndiff ** 2
-    dbndiff = dbndiff2 * (2 * c["bndiff"])
-    dhprebn = ...
-    dbnmeani = ...
-    dhprebn = ...
-    dembcat = ...
-    dW1 = ...
-    db1 = ...
-    demb = ...
+    dbndiff += dbndiff2 * (2 * c["bndiff"])
+    # bndiff = hprebn - bnmeani
+    dhprebn = dbndiff.clone()
+    # print(f'bnmeani:{c["bnmeani"].shape}')
+    dbnmeani = -dbndiff.sum(0, keepdim=True)
+    # bnmeani = hprebn.mean(0, keepdim=True)
+    dhprebn += dbnmeani * torch.ones_like(c["hprebn"]) / c["hprebn"].shape[0]
+    # hprebn = embcat @ W1 + b1
+    dembcat = dhprebn @ c["W1"].T
+    dW1 = c["embcat"].T @ dhprebn
+    # print(f'hprebn:{c["hprebn"].shape},b1:{c["b1"].shape}')
+    db1 = dhprebn.sum(0, keepdim=False)
+    # embcat = emb.view(emb.shape[0], -1)
+    print(f'emb:{c["emb"].shape}')
+    demb = dembcat.view(c["emb"].shape[0], c["emb"].shape[1], -1)
 
+    # emb = C[Xb]
     dC = torch.zeros_like(c["C"])
     # TODO：embedding 是查表操作；把重复字符位置的梯度累加回 C。
     # 提示：遍历 Xb 的 batch 维和 block_size 维，累加 demb[k, j]。
